@@ -1,6 +1,10 @@
 import mongoose from 'mongoose';
 import dns from 'dns';
 
+let handlersAttached = false;
+let retryTimer = null;
+const RETRY_DELAY_MS = Number(process.env.MONGODB_RETRY_DELAY_MS || 5000);
+
 const isSrvDnsRefusedError = (error) => {
   const msg = error?.message || '';
   return msg.includes('querySrv ECONNREFUSED') || msg.includes('_mongodb._tcp');
@@ -26,6 +30,9 @@ const connect = async () => {
 };
 
 const attachConnectionHandlers = () => {
+  if (handlersAttached) return;
+  handlersAttached = true;
+
   mongoose.connection.on('error', (err) => {
     console.error('MongoDB connection error:', err);
   });
@@ -42,6 +49,11 @@ const attachConnectionHandlers = () => {
 };
 
 const connectDB = async () => {
+  if (retryTimer) {
+    clearTimeout(retryTimer);
+    retryTimer = null;
+  }
+
   try {
     const conn = await connect();
     console.log(`MongoDB Connected: ${conn.connection.host}`);
@@ -56,12 +68,17 @@ const connectDB = async () => {
         return;
       } catch (retryError) {
         console.error(`Error connecting to MongoDB after DNS fallback: ${retryError.message}`);
-        process.exit(1);
       }
     }
+    else {
+      console.error(`Error connecting to MongoDB: ${error.message}`);
+    }
 
-    console.error(`Error connecting to MongoDB: ${error.message}`);
-    process.exit(1);
+    // Keep backend alive and retry DB connection instead of crashing nodemon/app.
+    retryTimer = setTimeout(() => {
+      console.log(`Retrying MongoDB connection in ${RETRY_DELAY_MS / 1000}s...`);
+      connectDB();
+    }, RETRY_DELAY_MS);
   }
 };
 

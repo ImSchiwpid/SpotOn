@@ -26,8 +26,8 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['user', 'admin'],
-    default: 'user'
+    enum: ['customer', 'parking_owner', 'admin', 'user'],
+    default: 'customer'
   },
   googleId: {
     type: String,
@@ -45,6 +45,11 @@ const userSchema = new mongoose.Schema({
   isVerified: {
     type: Boolean,
     default: false
+  },
+  ownerVerificationStatus: {
+    type: String,
+    enum: ['not_applicable', 'pending', 'verified', 'rejected'],
+    default: 'not_applicable'
   },
   isActive: {
     type: Boolean,

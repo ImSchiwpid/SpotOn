@@ -1,4 +1,5 @@
 import ParkingSpot from '../models/ParkingSpot.js';
+import Booking from '../models/Booking.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { uploadToCloudinary, deleteMultipleImages } from '../config/cloudinary.js';
 import { sendParkingApprovalEmail } from '../utils/sendEmail.js';
@@ -18,8 +19,24 @@ export const createParkingSpot = asyncHandler(async (req, res) => {
     pricePerHour,
     totalSlots,
     amenities,
-    vehicleTypes
+    vehicleTypes,
+    parkingType,
+    hasCCTV,
+    hasEVCharging,
+    availability
   } = req.body;
+
+  let parsedLocation = location;
+  try {
+    if (typeof parsedLocation === 'string') {
+      parsedLocation = JSON.parse(parsedLocation);
+    }
+  } catch (error) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid location payload'
+    });
+  }
 
   // Upload images to Cloudinary
   const images = [];
@@ -33,6 +50,22 @@ export const createParkingSpot = asyncHandler(async (req, res) => {
     }
   }
 
+  let parsedAmenities = [];
+  let parsedVehicleTypes = ['car'];
+  let parsedAvailability = { startHour: 0, endHour: 24 };
+  try {
+    parsedAmenities = amenities ? JSON.parse(amenities) : [];
+    parsedVehicleTypes = vehicleTypes ? JSON.parse(vehicleTypes) : ['car'];
+    if (availability) {
+      parsedAvailability = typeof availability === 'string' ? JSON.parse(availability) : availability;
+    }
+  } catch (error) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid parking payload fields'
+    });
+  }
+
   // Create parking spot
   const parkingSpot = await ParkingSpot.create({
     title,
@@ -41,13 +74,17 @@ export const createParkingSpot = asyncHandler(async (req, res) => {
     city,
     state,
     zipCode,
-    location,
+    location: parsedLocation,
     pricePerHour,
     totalSlots,
     availableSlots: totalSlots,
     images,
-    amenities: amenities ? JSON.parse(amenities) : [],
-    vehicleTypes: vehicleTypes ? JSON.parse(vehicleTypes) : ['car'],
+    amenities: parsedAmenities,
+    vehicleTypes: parsedVehicleTypes,
+    parkingType: parkingType || 'open',
+    hasCCTV: hasCCTV === true || hasCCTV === 'true',
+    hasEVCharging: hasEVCharging === true || hasEVCharging === 'true',
+    availability: parsedAvailability,
     owner: req.user.id
   });
 
@@ -68,30 +105,38 @@ export const createParkingSpot = asyncHandler(async (req, res) => {
 // @route   GET /api/parking
 // @access  Public
 export const getParkingSpots = asyncHandler(async (req, res) => {
-  const { city, state, minPrice, maxPrice, lat, lng, radius } = req.query;
+  const {
+    city,
+    state,
+    minPrice,
+    maxPrice,
+    lat,
+    lng,
+    radius,
+    parkingType,
+    hasCCTV,
+    hasEVCharging,
+    startTime,
+    endTime
+  } = req.query;
 
-  let query = { isActive: true, isApproved: true };
+  let query = { isActive: true, isApproved: true, isMaintenanceMode: false };
 
-  // Filter by city
-  if (city) {
-    query.city = new RegExp(city, 'i');
-  }
+  if (city) query.city = new RegExp(city, 'i');
+  if (state) query.state = new RegExp(state, 'i');
 
-  // Filter by state
-  if (state) {
-    query.state = new RegExp(state, 'i');
-  }
-
-  // Filter by price range
   if (minPrice || maxPrice) {
     query.pricePerHour = {};
     if (minPrice) query.pricePerHour.$gte = Number(minPrice);
     if (maxPrice) query.pricePerHour.$lte = Number(maxPrice);
   }
 
-  // Geospatial query
+  if (parkingType) query.parkingType = parkingType;
+  if (hasCCTV !== undefined) query.hasCCTV = hasCCTV === 'true';
+  if (hasEVCharging !== undefined) query.hasEVCharging = hasEVCharging === 'true';
+
   if (lat && lng) {
-    const radiusInMeters = radius ? Number(radius) * 1000 : 5000; // Default 5km
+    const radiusInMeters = radius ? Number(radius) * 1000 : 5000;
     query.location = {
       $near: {
         $geometry: {
@@ -103,9 +148,38 @@ export const getParkingSpots = asyncHandler(async (req, res) => {
     };
   }
 
-  const parkingSpots = await ParkingSpot.find(query)
-    .populate('owner', 'name email phone')
-    .sort('-createdAt');
+  let parkingSpots = await ParkingSpot.find(query).populate('owner', 'name email phone').sort('-createdAt');
+
+  if (startTime && endTime && parkingSpots.length > 0) {
+    const start = new Date(startTime);
+    const end = new Date(endTime);
+    const hour = start.getHours();
+
+    parkingSpots = parkingSpots.filter(
+      (spot) => spot.availability?.startHour <= hour && hour < spot.availability?.endHour
+    );
+
+    const parkingIds = parkingSpots.map((spot) => spot._id);
+    const overlaps = await Booking.aggregate([
+      {
+        $match: {
+          parkingSpot: { $in: parkingIds },
+          status: { $in: ['pending', 'confirmed'] },
+          startTime: { $lt: end },
+          endTime: { $gt: start }
+        }
+      },
+      {
+        $group: {
+          _id: '$parkingSpot',
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+
+    const overlapMap = new Map(overlaps.map((item) => [item._id.toString(), item.count]));
+    parkingSpots = parkingSpots.filter((spot) => (overlapMap.get(spot._id.toString()) || 0) < spot.totalSlots);
+  }
 
   res.status(200).json({
     success: true,
@@ -168,12 +242,22 @@ export const updateParkingSpot = asyncHandler(async (req, res) => {
     req.body.images = [...parkingSpot.images, ...newImages];
   }
 
-  // Parse arrays if they're strings
-  if (req.body.amenities && typeof req.body.amenities === 'string') {
-    req.body.amenities = JSON.parse(req.body.amenities);
-  }
-  if (req.body.vehicleTypes && typeof req.body.vehicleTypes === 'string') {
-    req.body.vehicleTypes = JSON.parse(req.body.vehicleTypes);
+  // Parse JSON payload fields that may arrive as strings in multipart form-data
+  try {
+    if (req.body.location && typeof req.body.location === 'string') {
+      req.body.location = JSON.parse(req.body.location);
+    }
+    if (req.body.amenities && typeof req.body.amenities === 'string') {
+      req.body.amenities = JSON.parse(req.body.amenities);
+    }
+    if (req.body.vehicleTypes && typeof req.body.vehicleTypes === 'string') {
+      req.body.vehicleTypes = JSON.parse(req.body.vehicleTypes);
+    }
+  } catch (error) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid update payload'
+    });
   }
 
   parkingSpot = await ParkingSpot.findByIdAndUpdate(req.params.id, req.body, {

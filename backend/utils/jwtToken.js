@@ -10,6 +10,7 @@ export const generateToken = (id) => {
 // Send token in cookie
 export const sendTokenResponse = (user, statusCode, res) => {
   const token = generateToken(user._id);
+  const normalizedRole = user.role === 'user' ? 'customer' : user.role;
 
   const options = {
     expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
@@ -25,7 +26,7 @@ export const sendTokenResponse = (user, statusCode, res) => {
       id: user._id,
       name: user.name,
       email: user.email,
-      role: user.role,
+      role: normalizedRole,
       walletBalance: user.walletBalance,
       profileImage: user.profileImage
     }

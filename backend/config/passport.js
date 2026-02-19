@@ -38,7 +38,8 @@ export const configurePassport = () => {
             name: profile.displayName,
             email: profile.emails[0].value,
             profileImage: profile.photos && profile.photos.length > 0 ? profile.photos[0].value : null,
-            isVerified: true
+            isVerified: true,
+            role: 'customer'
           });
 
           done(null, user);

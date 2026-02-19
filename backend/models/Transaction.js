@@ -12,13 +12,12 @@ const transactionSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['credit', 'debit', 'refund', 'earning'],
+    enum: ['credit', 'debit', 'refund', 'earning', 'platform_fee', 'withdrawal_request', 'withdrawal_paid', 'penalty'],
     required: true
   },
   amount: {
     type: Number,
     required: true,
-    min: 0
   },
   description: {
     type: String,
@@ -39,7 +38,7 @@ const transactionSchema = new mongoose.Schema({
   },
   paymentMethod: {
     type: String,
-    enum: ['razorpay', 'wallet', 'refund'],
+    enum: ['razorpay', 'wallet', 'refund', 'bank_transfer', 'manual'],
     default: 'razorpay'
   },
   razorpayPaymentId: {
@@ -60,3 +59,4 @@ transactionSchema.index({ type: 1 });
 const Transaction = mongoose.model('Transaction', transactionSchema);
 
 export default Transaction;
+

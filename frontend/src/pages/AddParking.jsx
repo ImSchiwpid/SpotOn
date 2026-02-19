@@ -1,437 +1,429 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { FiMapPin, FiUpload, FiDollarSign, FiTruck, FiCheck, FiImage, FiNavigation, FiType, FiList } from 'react-icons/fi';
+import toast from 'react-hot-toast';
+import { FiDollarSign, FiMapPin, FiUpload } from 'react-icons/fi';
+import { MapContainer, Marker, TileLayer, useMap, useMapEvents } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import { MainLayout } from '../components/layout';
+import { parkingAPI } from '../utils/api';
+
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png'
+});
+
+const DEFAULT_CENTER = [20.5937, 78.9629];
+
+const MapClickPicker = ({ onSelect }) => {
+  useMapEvents({
+    click(event) {
+      const { lat, lng } = event.latlng;
+      onSelect([lat, lng]);
+    }
+  });
+  return null;
+};
+
+const MapRecenter = ({ center }) => {
+  const map = useMap();
+
+  React.useEffect(() => {
+    if (!Array.isArray(center) || center.length !== 2) return;
+    map.setView(center, 14);
+  }, [center, map]);
+
+  return null;
+};
 
 const AddParking = () => {
-  const [currentStep, setCurrentStep] = useState(1);
-  const [formData, setFormData] = useState({
-    name: '',
-    address: '',
+  const navigate = useNavigate();
+  const [submitting, setSubmitting] = useState(false);
+  const [images, setImages] = useState([]);
+  const [mapCenter, setMapCenter] = useState(DEFAULT_CENTER);
+  const [selectedCoords, setSelectedCoords] = useState(null);
+  const [form, setForm] = useState({
+    title: '',
     description: '',
-    price: '',
-    availableSpots: '',
-    amenities: [],
-    images: [],
-    operatingHours: { start: '00:00', end: '23:59' },
-    vehicleTypes: [],
-    rules: '',
+    address: '',
+    city: '',
+    state: '',
+    zipCode: '',
+    pricePerHour: '',
+    totalSlots: '',
+    amenities: '',
+    vehicleTypes: ['car'],
+    parkingType: 'open',
+    hasCCTV: false,
+    hasEVCharging: false,
+    availabilityStart: 0,
+    availabilityEnd: 24
   });
 
-  const amenitiesList = [
-    'Covered Parking', 'EV Charging', '24/7 Access', 'Security', 'CCTV', 
-    'Valet', 'Car Wash', 'Restroom', 'Waiting Area', 'WiFi'
-  ];
+  const handleChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setForm((prev) => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
+  };
 
-  const vehicleTypes = [
-    { icon: FiTruck, label: 'Sedan', description: 'Standard cars' },
-    { icon: FiTruck, label: 'SUV', description: 'Larger vehicles' },
-    { icon: FiTruck, label: 'Motorcycle', description: 'Bikes & scooters' },
-    { icon: FiTruck, label: 'EV', description: 'Electric vehicles' },
-  ];
+  const handleVehicleTypeToggle = (type) => {
+    setForm((prev) => {
+      const hasType = prev.vehicleTypes.includes(type);
+      return {
+        ...prev,
+        vehicleTypes: hasType
+          ? prev.vehicleTypes.filter((item) => item !== type)
+          : [...prev.vehicleTypes, type]
+      };
+    });
+  };
 
-  const steps = [
-    { icon: FiType, label: 'Basic Info' },
-    { icon: FiMapPin, label: 'Location' },
-    { icon: FiList, label: 'Amenities' },
-    { icon: FiImage, label: 'Photos' },
-    { icon: FiCheck, label: 'Review' },
-  ];
+  const handleFiles = (e) => {
+    const files = Array.from(e.target.files || []);
+    setImages(files.slice(0, 5));
+  };
 
-  const handleAmenityToggle = (amenity) => {
-    setFormData(prev => ({
-      ...prev,
-      amenities: prev.amenities.includes(amenity)
-        ? prev.amenities.filter(a => a !== amenity)
-        : [...prev.amenities, amenity]
-    }));
+  const markerPosition = useMemo(
+    () => (selectedCoords && selectedCoords.length === 2 ? selectedCoords : null),
+    [selectedCoords]
+  );
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (!form.title || !form.address || !form.city || !form.state || !form.pricePerHour || !form.totalSlots) {
+      toast.error('Please fill all required fields');
+      return;
+    }
+    if (Number(form.availabilityStart) >= Number(form.availabilityEnd)) {
+      toast.error('Availability start hour must be less than end hour');
+      return;
+    }
+
+    const geocode = async (query) => {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`
+      );
+      const data = await response.json();
+      if (!Array.isArray(data) || data.length === 0) return null;
+
+      const lat = Number(data[0].lat);
+      const lng = Number(data[0].lon);
+      if (Number.isNaN(lat) || Number.isNaN(lng)) return null;
+
+      return { lat, lng };
+    };
+
+    const fullAddressQuery = [form.address, form.city, form.state, form.zipCode]
+      .filter(Boolean)
+      .join(', ');
+    const cityStateQuery = [form.city, form.state].filter(Boolean).join(', ');
+
+    let lat = DEFAULT_CENTER[0];
+    let lng = DEFAULT_CENTER[1];
+    if (markerPosition) {
+      lat = markerPosition[0];
+      lng = markerPosition[1];
+    } else {
+      let resolved = null;
+      try {
+        resolved = await geocode(fullAddressQuery);
+        if (!resolved && cityStateQuery) {
+          resolved = await geocode(cityStateQuery);
+        }
+      } catch (error) {
+        resolved = null;
+      }
+
+      if (resolved) {
+        lat = resolved.lat;
+        lng = resolved.lng;
+        setMapCenter([lat, lng]);
+        setSelectedCoords([lat, lng]);
+      } else {
+        setMapCenter(DEFAULT_CENTER);
+        toast('Exact address not found. Click on the map to set exact location.');
+      }
+    }
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || lng < -180 || lng > 180 || lat < -90 || lat > 90) {
+      toast.error('Selected map location is invalid.');
+      return;
+    }
+
+    const payload = new FormData();
+    payload.append('title', form.title);
+    payload.append('description', form.description);
+    payload.append('address', form.address);
+    payload.append('city', form.city);
+    payload.append('state', form.state);
+    payload.append('zipCode', form.zipCode);
+    payload.append('pricePerHour', form.pricePerHour);
+    payload.append('totalSlots', form.totalSlots);
+    payload.append('parkingType', form.parkingType);
+    payload.append('hasCCTV', form.hasCCTV ? 'true' : 'false');
+    payload.append('hasEVCharging', form.hasEVCharging ? 'true' : 'false');
+    payload.append(
+      'availability',
+      JSON.stringify({
+        startHour: Number(form.availabilityStart),
+        endHour: Number(form.availabilityEnd)
+      })
+    );
+    payload.append(
+      'location',
+      JSON.stringify({
+        type: 'Point',
+        coordinates: [lng, lat]
+      })
+    );
+    payload.append(
+      'amenities',
+      JSON.stringify(
+        form.amenities
+          .split(',')
+          .map((item) => item.trim())
+          .filter(Boolean)
+      )
+    );
+    payload.append('vehicleTypes', JSON.stringify(form.vehicleTypes.length ? form.vehicleTypes : ['car']));
+
+    images.forEach((file) => payload.append('images', file));
+
+    setSubmitting(true);
+    try {
+      await parkingAPI.create(payload);
+      toast.success('Parking spot published successfully');
+      navigate('/dashboard');
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to publish parking spot');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
     <MainLayout>
-      <div className="space-y-8">
-        {/* Header */}
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Add New Parking Spot</h1>
-          <p className="text-gray-500 mt-1">List your parking space and start earning today</p>
-        </div>
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="max-w-4xl mx-auto bg-white rounded-2xl border border-gray-100 shadow-card p-8"
+      >
+        <h1 className="text-3xl font-bold text-gray-900">Add New Parking Spot</h1>
+        <p className="text-gray-500 mt-1">Fill details and publish your listing.</p>
 
-        {/* Progress Steps */}
-        <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-6">
-          <div className="flex items-center justify-between">
-            {steps.map((step, index) => (
-              <React.Fragment key={step.label}>
-                <motion.button
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: index * 0.1 }}
-                  onClick={() => setCurrentStep(index + 1)}
-                  className={`flex flex-col items-center gap-2 ${
-                    index + 1 <= currentStep ? 'cursor-pointer' : 'cursor-not-allowed'
+        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8">
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Title *</label>
+            <input
+              name="title"
+              value={form.title}
+              onChange={handleChange}
+              className="w-full px-4 py-3 border border-gray-200 rounded-xl"
+              placeholder="Downtown Plaza - Spot A12"
+            />
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+            <textarea
+              name="description"
+              value={form.description}
+              onChange={handleChange}
+              rows={3}
+              className="w-full px-4 py-3 border border-gray-200 rounded-xl"
+              placeholder="Describe your parking spot"
+            />
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Address *</label>
+            <div className="relative">
+              <FiMapPin className="absolute left-3 top-3.5 text-gray-400" />
+              <input
+                name="address"
+                value={form.address}
+                onChange={handleChange}
+                className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl"
+                placeholder="123 Main Street"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">City *</label>
+            <input name="city" value={form.city} onChange={handleChange} className="w-full px-4 py-3 border border-gray-200 rounded-xl" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">State *</label>
+            <input name="state" value={form.state} onChange={handleChange} className="w-full px-4 py-3 border border-gray-200 rounded-xl" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Zip Code</label>
+            <input name="zipCode" value={form.zipCode} onChange={handleChange} className="w-full px-4 py-3 border border-gray-200 rounded-xl" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Price per Hour *</label>
+            <div className="relative">
+              <FiDollarSign className="absolute left-3 top-3.5 text-gray-400" />
+              <input
+                name="pricePerHour"
+                type="number"
+                min="0"
+                value={form.pricePerHour}
+                onChange={handleChange}
+                className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Total Slots *</label>
+            <input
+              name="totalSlots"
+              type="number"
+              min="1"
+              value={form.totalSlots}
+              onChange={handleChange}
+              className="w-full px-4 py-3 border border-gray-200 rounded-xl"
+            />
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Pick Exact Location *</label>
+            <p className="text-xs text-gray-500 mb-2">
+              Click on the map to place the parking marker. If you skip this, we will use the best address match.
+            </p>
+            <div className="h-72 rounded-2xl overflow-hidden border border-gray-200">
+              <MapContainer center={mapCenter} zoom={5} className="h-full w-full">
+                <TileLayer
+                  attribution='&copy; OpenStreetMap contributors'
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                />
+                <MapRecenter center={mapCenter} />
+                <MapClickPicker
+                  onSelect={(coords) => {
+                    setSelectedCoords(coords);
+                    setMapCenter(coords);
+                  }}
+                />
+                {markerPosition && <Marker position={markerPosition} />}
+              </MapContainer>
+            </div>
+            <p className="text-xs text-gray-600 mt-2">
+              {markerPosition
+                ? `Selected: ${markerPosition[0].toFixed(6)}, ${markerPosition[1].toFixed(6)}`
+                : 'No pin selected yet.'}
+            </p>
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Parking Type</label>
+            <select
+              name="parkingType"
+              value={form.parkingType}
+              onChange={handleChange}
+              className="w-full px-4 py-3 border border-gray-200 rounded-xl"
+            >
+              <option value="open">Open</option>
+              <option value="covered">Covered</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Start Hour</label>
+            <input
+              name="availabilityStart"
+              type="number"
+              min="0"
+              max="23"
+              value={form.availabilityStart}
+              onChange={handleChange}
+              className="w-full px-4 py-3 border border-gray-200 rounded-xl"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">End Hour</label>
+            <input
+              name="availabilityEnd"
+              type="number"
+              min="1"
+              max="24"
+              value={form.availabilityEnd}
+              onChange={handleChange}
+              className="w-full px-4 py-3 border border-gray-200 rounded-xl"
+            />
+          </div>
+
+          <div className="md:col-span-2 flex flex-wrap gap-6">
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input type="checkbox" name="hasCCTV" checked={form.hasCCTV} onChange={handleChange} />
+              CCTV Available
+            </label>
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                name="hasEVCharging"
+                checked={form.hasEVCharging}
+                onChange={handleChange}
+              />
+              EV Charging
+            </label>
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Amenities (comma separated)</label>
+            <input
+              name="amenities"
+              value={form.amenities}
+              onChange={handleChange}
+              className="w-full px-4 py-3 border border-gray-200 rounded-xl"
+              placeholder="Covered Parking, CCTV, EV Charging"
+            />
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Vehicle Types</label>
+            <div className="flex flex-wrap gap-2">
+              {['car', 'bike', 'truck', 'van'].map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => handleVehicleTypeToggle(type)}
+                  className={`px-4 py-2 rounded-xl border ${
+                    form.vehicleTypes.includes(type)
+                      ? 'bg-primary-600 border-primary-600 text-white'
+                      : 'bg-white border-gray-200 text-gray-700'
                   }`}
                 >
-                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${
-                    index + 1 < currentStep
-                      ? 'bg-green-500 text-white'
-                      : index + 1 === currentStep
-                      ? 'bg-primary-600 text-white shadow-lg shadow-primary-500/30'
-                      : 'bg-gray-100 text-gray-400'
-                  }`}>
-                    {index + 1 < currentStep ? (
-                      <FiCheck className="w-5 h-5" />
-                    ) : (
-                      <step.icon className="w-5 h-5" />
-                    )}
-                  </div>
-                  <span className={`text-sm font-medium ${
-                    index + 1 <= currentStep ? 'text-gray-900' : 'text-gray-400'
-                  }`}>
-                    {step.label}
-                  </span>
-                </motion.button>
-                {index < steps.length - 1 && (
-                  <div className={`flex-1 h-1 mx-2 rounded ${
-                    index + 1 < currentStep ? 'bg-green-500' : 'bg-gray-100'
-                  }`} />
-                )}
-              </React.Fragment>
-            ))}
-          </div>
-        </div>
-
-        {/* Form Content */}
-        <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-8">
-          {/* Step 1: Basic Info */}
-          {currentStep === 1 && (
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="space-y-6"
-            >
-              <h2 className="text-xl font-bold text-gray-900">Basic Information</h2>
-              
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Parking Spot Name *
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g., Downtown Plaza - Spot A12"
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Description *
-                  </label>
-                  <textarea
-                    rows="4"
-                    placeholder="Describe your parking spot, access instructions, and what makes it special..."
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all resize-none"
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Price per Hour ($) *
-                    </label>
-                    <div className="relative">
-                      <FiDollarSign className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                      <input
-                        type="number"
-                        placeholder="5.00"
-                        className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all"
-                        value={formData.price}
-                        onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Available Spots *
-                    </label>
-                    <input
-                      type="number"
-                      placeholder="2"
-                      className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all"
-                      value={formData.availableSpots}
-                      onChange={(e) => setFormData({ ...formData, availableSpots: e.target.value })}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-3">
-                    Supported Vehicle Types
-                  </label>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    {vehicleTypes.map((type) => (
-                      <button
-                        key={type.label}
-                        className={`p-4 border rounded-xl text-center transition-all ${
-                          formData.vehicleTypes.includes(type.label)
-                            ? 'border-primary-500 bg-primary-50 text-primary-700'
-                            : 'border-gray-200 hover:border-gray-300'
-                        }`}
-                        onClick={() => {
-                          setFormData(prev => ({
-                            ...prev,
-                            vehicleTypes: prev.vehicleTypes.includes(type.label)
-                              ? prev.vehicleTypes.filter(v => v !== type.label)
-                              : [...prev.vehicleTypes, type.label]
-                          }));
-                        }}
-                      >
-                        <type.icon className="w-6 h-6 mx-auto mb-2" />
-                        <p className="font-medium text-sm">{type.label}</p>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          )}
-
-          {/* Step 2: Location */}
-          {currentStep === 2 && (
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="space-y-6"
-            >
-              <h2 className="text-xl font-bold text-gray-900">Location Details</h2>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Full Address *
-                  </label>
-                  <div className="relative">
-                    <FiMapPin className="absolute left-4 top-3 w-5 h-5 text-gray-400" />
-                    <input
-                      type="text"
-                      placeholder="Enter your parking address"
-                      className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all"
-                      value={formData.address}
-                      onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                    />
-                  </div>
-                </div>
-
-                <div className="h-64 bg-gray-100 rounded-2xl flex items-center justify-center border-2 border-dashed border-gray-200">
-                  <div className="text-center">
-                    <FiNavigation className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                    <p className="text-gray-500">Map preview will appear here</p>
-                    <button className="mt-3 px-4 py-2 bg-primary-600 text-white rounded-xl font-medium hover:bg-primary-700 transition-colors">
-                      Pin Location on Map
-                    </button>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Opening Time
-                    </label>
-                    <input
-                      type="time"
-                      className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all"
-                      value={formData.operatingHours.start}
-                      onChange={(e) => setFormData({
-                        ...formData,
-                        operatingHours: { ...formData.operatingHours, start: e.target.value }
-                      })}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Closing Time
-                    </label>
-                    <input
-                      type="time"
-                      className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all"
-                      value={formData.operatingHours.end}
-                      onChange={(e) => setFormData({
-                        ...formData,
-                        operatingHours: { ...formData.operatingHours, end: e.target.value }
-                      })}
-                    />
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          )}
-
-          {/* Step 3: Amenities */}
-          {currentStep === 3 && (
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="space-y-6"
-            >
-              <h2 className="text-xl font-bold text-gray-900">Amenities & Features</h2>
-              <p className="text-gray-500">Select all amenities available at your parking spot</p>
-
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                {amenitiesList.map((amenity) => (
-                  <button
-                    key={amenity}
-                    onClick={() => handleAmenityToggle(amenity)}
-                    className={`p-4 border rounded-xl text-center transition-all ${
-                      formData.amenities.includes(amenity)
-                        ? 'border-primary-500 bg-primary-50 text-primary-700'
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                  >
-                    <FiCheck className={`w-6 h-6 mx-auto mb-2 ${
-                      formData.amenities.includes(amenity) ? 'opacity-100' : 'opacity-0'
-                    }`} />
-                    <p className="font-medium text-sm">{amenity}</p>
-                  </button>
-                ))}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Additional Rules or Instructions
-                </label>
-                <textarea
-                  rows="3"
-                  placeholder="Any specific rules, access codes, or instructions for guests..."
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all resize-none"
-                  value={formData.rules}
-                  onChange={(e) => setFormData({ ...formData, rules: e.target.value })}
-                />
-              </div>
-            </motion.div>
-          )}
-
-          {/* Step 4: Photos */}
-          {currentStep === 4 && (
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="space-y-6"
-            >
-              <h2 className="text-xl font-bold text-gray-900">Photos</h2>
-              <p className="text-gray-500">Add photos to help guests find and recognize your spot</p>
-
-              <div className="border-2 border-dashed border-gray-200 rounded-2xl p-12 text-center hover:border-primary-300 transition-colors cursor-pointer">
-                <FiUpload className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <p className="text-lg font-medium text-gray-900 mb-2">
-                  Drag and drop photos here
-                </p>
-                <p className="text-gray-500 mb-4">
-                  or click to browse from your computer
-                </p>
-                <p className="text-sm text-gray-400">
-                  Supports: JPG, PNG, WebP (Max 5MB each)
-                </p>
-                <button className="mt-4 px-6 py-2 bg-primary-600 text-white rounded-xl font-medium hover:bg-primary-700 transition-colors">
-                  Select Photos
+                  {type}
                 </button>
-              </div>
+              ))}
+            </div>
+          </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {/* Placeholder for uploaded images */}
-                <div className="aspect-square bg-gray-100 rounded-xl flex items-center justify-center">
-                  <span className="text-gray-400">Photo 1</span>
-                </div>
-                <div className="aspect-square bg-gray-100 rounded-xl flex items-center justify-center">
-                  <span className="text-gray-400">Photo 2</span>
-                </div>
-                <div className="aspect-square bg-gray-100 rounded-xl flex items-center justify-center">
-                  <span className="text-gray-400">Photo 3</span>
-                </div>
-                <div className="aspect-square bg-gray-100 rounded-xl flex items-center justify-center">
-                  <span className="text-gray-400">Photo 4</span>
-                </div>
-              </div>
-            </motion.div>
-          )}
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Images (max 5)</label>
+            <label className="block border-2 border-dashed border-gray-200 rounded-2xl p-8 text-center cursor-pointer hover:border-primary-300 transition-colors">
+              <FiUpload className="w-10 h-10 text-gray-400 mx-auto mb-2" />
+              <p className="text-sm text-gray-600">Click to select images</p>
+              <input type="file" accept="image/*" multiple className="hidden" onChange={handleFiles} />
+            </label>
+            {images.length > 0 && <p className="text-sm text-gray-500 mt-2">{images.length} image(s) selected</p>}
+          </div>
 
-          {/* Step 5: Review */}
-          {currentStep === 5 && (
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="space-y-6"
-            >
-              <h2 className="text-xl font-bold text-gray-900">Review Your Listing</h2>
-              <p className="text-gray-500">Review all details before publishing your parking spot</p>
-
-              <div className="bg-gray-50 rounded-2xl p-6 space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-gray-500">Spot Name</p>
-                    <p className="font-medium text-gray-900">{formData.name || 'Not set'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Price per Hour</p>
-                    <p className="font-medium text-gray-900">${formData.price || '0'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Available Spots</p>
-                    <p className="font-medium text-gray-900">{formData.availableSpots || '0'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Address</p>
-                    <p className="font-medium text-gray-900">{formData.address || 'Not set'}</p>
-                  </div>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Amenities</p>
-                  <div className="flex flex-wrap gap-2 mt-1">
-                    {formData.amenities.length > 0 ? (
-                      formData.amenities.map((amenity) => (
-                        <span key={amenity} className="px-2 py-1 bg-primary-100 text-primary-700 rounded-lg text-sm">
-                          {amenity}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="text-gray-400">No amenities selected</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          )}
-
-          {/* Navigation Buttons */}
-          <div className="flex justify-between mt-8 pt-6 border-t border-gray-100">
+          <div className="md:col-span-2">
             <button
-              onClick={() => setCurrentStep(Math.max(1, currentStep - 1))}
-              className={`px-6 py-3 border border-gray-200 rounded-xl font-medium transition-colors ${
-                currentStep === 1 ? 'opacity-0 pointer-events-none' : 'text-gray-700 hover:bg-gray-50'
-              }`}
+              type="submit"
+              disabled={submitting}
+              className="w-full px-6 py-3 bg-primary-600 text-white rounded-xl font-medium hover:bg-primary-700 transition-colors disabled:opacity-60"
             >
-              Back
-            </button>
-            <button
-              onClick={() => {
-                if (currentStep < 5) {
-                  setCurrentStep(currentStep + 1);
-                } else {
-                  // Submit form
-                  console.log('Submitting:', formData);
-                }
-              }}
-              className="px-6 py-3 bg-primary-600 text-white rounded-xl font-medium hover:bg-primary-700 transition-colors shadow-lg shadow-primary-500/30 flex items-center gap-2"
-            >
-              {currentStep === 5 ? 'Publish Spot' : 'Continue'}
-              <FiCheck className="w-4 h-4" />
+              {submitting ? 'Publishing...' : 'Publish Spot'}
             </button>
           </div>
-        </div>
-      </div>
+        </form>
+      </motion.div>
     </MainLayout>
   );
 };

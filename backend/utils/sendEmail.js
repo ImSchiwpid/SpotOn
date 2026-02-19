@@ -2,10 +2,16 @@ import sgMail from '@sendgrid/mail';
 
 // Send email using SendGrid
 // Lazily set API key to avoid startup errors if credentials are missing
+let sendgridAuthInvalid = false;
+
 const getApiKey = () => {
+  if (sendgridAuthInvalid) {
+    return null;
+  }
+
   const apiKey = process.env.SENDGRID_API_KEY;
   if (!apiKey || !apiKey.startsWith('SG.')) {
-    console.warn('⚠️ SendGrid API key is missing or invalid - emails will be simulated only');
+    console.warn('SendGrid API key is missing or invalid. Emails will be simulated.');
     return null;
   }
   return apiKey;
@@ -16,7 +22,7 @@ export const sendEmail = async (options) => {
   
   // If no valid API key, simulate email sending
   if (!apiKey) {
-    console.log(`📧 [SIMULATED] Email to ${options.to}`);
+    console.log(`[SIMULATED EMAIL] To: ${options.to}`);
     console.log(`   Subject: ${options.subject}`);
     return { success: true, simulated: true };
   }
@@ -35,14 +41,21 @@ export const sendEmail = async (options) => {
     };
 
     await sgMail.send(msg);
-    console.log(`✅ Email sent to ${options.to}`);
+    console.log(`Email sent to ${options.to}`);
     return { success: true };
   } catch (error) {
-    console.error('❌ SendGrid error:', error);
+    const statusCode = error?.code || error?.response?.statusCode;
+    if (statusCode === 401) {
+      sendgridAuthInvalid = true;
+      console.error('SendGrid authentication failed (401). Check SENDGRID_API_KEY. Falling back to simulated emails.');
+      return { success: false, simulated: true, reason: 'sendgrid_unauthorized' };
+    }
+
+    console.error('SendGrid error:', error);
     if (error.response) {
       console.error(error.response.body);
     }
-    throw error;
+    return { success: false, reason: 'sendgrid_send_failed' };
   }
 };
 
@@ -211,3 +224,5 @@ export const sendParkingApprovalEmail = async (user, parkingSpot) => {
 };
 
 export default sendEmail;
+
+

@@ -8,7 +8,7 @@ import {
   getMyParkingSpots,
   getCities
 } from '../controllers/parkingController.js';
-import { protect } from '../middleware/auth.js';
+import { protect, restrictTo } from '../middleware/auth.js';
 import { parkingSpotValidation, mongoIdValidation } from '../middleware/validation.js';
 import { upload } from '../config/cloudinary.js';
 import { uploadLimiter } from '../middleware/rateLimiter.js';
@@ -22,9 +22,9 @@ router.get('/:id', mongoIdValidation, getParkingSpot);
 
 // Protected routes
 router.use(protect);
-router.post('/', uploadLimiter, upload.array('images', 5), createParkingSpot);
+router.post('/', restrictTo('parking_owner', 'admin'), uploadLimiter, upload.array('images', 5), createParkingSpot);
 router.get('/my/spots', getMyParkingSpots);
-router.put('/:id', mongoIdValidation, upload.array('images', 5), updateParkingSpot);
-router.delete('/:id', mongoIdValidation, deleteParkingSpot);
+router.put('/:id', mongoIdValidation, restrictTo('parking_owner', 'admin'), upload.array('images', 5), updateParkingSpot);
+router.delete('/:id', mongoIdValidation, restrictTo('parking_owner', 'admin'), deleteParkingSpot);
 
 export default router;

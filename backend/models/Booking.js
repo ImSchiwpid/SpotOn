@@ -66,6 +66,21 @@ const bookingSchema = new mongoose.Schema({
   },
   cancelledAt: {
     type: Date
+  },
+  ownerDecision: {
+    type: String,
+    enum: ['not_required', 'pending', 'approved', 'rejected'],
+    default: 'not_required'
+  },
+  ownerDecisionAt: {
+    type: Date
+  },
+  ownerDecisionReason: {
+    type: String,
+    trim: true
+  },
+  invoiceNumber: {
+    type: String
   }
 }, {
   timestamps: true
@@ -84,6 +99,7 @@ bookingSchema.index({ user: 1, createdAt: -1 });
 bookingSchema.index({ parkingSpot: 1 });
 bookingSchema.index({ status: 1 });
 bookingSchema.index({ bookingCode: 1 });
+bookingSchema.index({ ownerDecision: 1 });
 
 const Booking = mongoose.model('Booking', bookingSchema);
 

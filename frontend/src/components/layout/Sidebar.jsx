@@ -4,30 +4,44 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   FiHome,
   FiMap,
+  FiHeart,
   FiCalendar,
+  FiTruck,
   FiPlusCircle,
   FiUser,
-  FiLogOut,
-  FiSettings,
+  FiTrendingUp,
+  FiShield,
   FiChevronLeft,
-  FiChevronRight,
-  FiHelpCircle
+  FiChevronRight
 } from 'react-icons/fi';
+import { AuthContext } from '../../App';
+import { normalizeRole } from '../../utils/roles';
 
 const navItems = [
   { icon: FiHome, label: 'Dashboard', path: '/dashboard' },
   { icon: FiMap, label: 'Explore Parking', path: '/explore' },
+  { icon: FiHeart, label: 'Favorites', path: '/favorites' },
   { icon: FiCalendar, label: 'My Bookings', path: '/bookings' },
+  { icon: FiTruck, label: 'My Cars', path: '/cars' },
   { icon: FiPlusCircle, label: 'Add Parking', path: '/add-parking' },
+  { icon: FiTrendingUp, label: 'Owner Panel', path: '/owner' },
+  { icon: FiShield, label: 'Admin Panel', path: '/admin' },
   { icon: FiUser, label: 'Profile', path: '/profile' },
 ];
 
-const bottomItems = [
-  { icon: FiSettings, label: 'Settings', path: '/settings' },
-  { icon: FiHelpCircle, label: 'Help & Support', path: '/help' },
-];
-
 const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
+  const { user } = React.useContext(AuthContext);
+  const currentRole = normalizeRole(user?.role);
+  const visibleNavItems = navItems.filter((item) => {
+    if (item.path === '/add-parking' || item.path === '/owner') {
+      return currentRole === 'parking_owner' || currentRole === 'admin';
+    }
+    if (item.path === '/admin') {
+      return currentRole === 'admin';
+    }
+    return true;
+  });
+
   return (
     <motion.aside
       initial={false}
@@ -62,7 +76,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
       {/* Navigation */}
       <nav className="flex-1 py-6 px-3 overflow-y-auto">
         <ul className="space-y-2">
-          {navItems.map((item) => (
+          {visibleNavItems.map((item) => (
             <NavItem
               key={item.path}
               {...item}
@@ -71,38 +85,6 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
           ))}
         </ul>
       </nav>
-
-      {/* Bottom Section */}
-      <div className="p-3 border-t border-gray-100">
-        <ul className="space-y-2">
-          {bottomItems.map((item) => (
-            <NavItem
-              key={item.path}
-              {...item}
-              isCollapsed={isCollapsed}
-            />
-          ))}
-          <li>
-            <button className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-gray-500 hover:text-red-600 hover:bg-red-50 transition-all duration-200 group">
-              <div className="w-10 h-10 rounded-xl bg-gray-100 group-hover:bg-red-100 flex items-center justify-center transition-colors">
-                <FiLogOut className="w-5 h-5" />
-              </div>
-              <AnimatePresence>
-                {!isCollapsed && (
-                  <motion.span
-                    initial={{ opacity: 0, width: 0 }}
-                    animate={{ opacity: 1, width: 'auto' }}
-                    exit={{ opacity: 0, width: 0 }}
-                    className="font-medium overflow-hidden whitespace-nowrap"
-                  >
-                    Logout
-                  </motion.span>
-                )}
-              </AnimatePresence>
-            </button>
-          </li>
-        </ul>
-      </div>
 
       {/* Collapse Toggle */}
       <button

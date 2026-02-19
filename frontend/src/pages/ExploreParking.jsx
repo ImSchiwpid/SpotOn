@@ -1,273 +1,672 @@
-import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { FiMapPin, FiStar, FiSearch, FiFilter, FiHeart, FiNavigation, FiCalendar } from 'react-icons/fi';
+import React, { useContext, useEffect, useMemo, useState } from 'react';
+import { motion } from 'framer-motion';
+import { MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+import toast from 'react-hot-toast';
+import { FiDollarSign, FiHeart, FiInfo, FiMapPin, FiSearch } from 'react-icons/fi';
 import { MainLayout } from '../components/layout';
+import { AuthContext, SocketContext } from '../App';
+import { bookingAPI, carAPI, favoriteAPI, parkingAPI } from '../utils/api';
 
-const parkingSpots = [
-  {
-    id: 1,
-    name: 'Downtown Plaza Parking',
-    address: '123 Main Street, Downtown',
-    price: 5,
-    rating: 4.8,
-    reviews: 234,
-    available: 12,
-    distance: '0.3 km',
-    image: 'https://images.unsplash.com/photo-1506521781263-d8422e82f27a?w=400&h=300&fit=crop',
-    features: ['Covered', 'EV Charging', '24/7 Access'],
-    verified: true,
-  },
-  {
-    id: 2,
-    name: 'City Mall Basement',
-    address: '456 Shopping Ave, Midtown',
-    price: 3,
-    rating: 4.6,
-    reviews: 189,
-    available: 8,
-    distance: '0.8 km',
-    image: 'https://images.unsplash.com/photo-1573348722427-f1d6d73a3d79?w=400&h=300&fit=crop',
-    features: ['Security', 'CCTV', 'Valet'],
-    verified: true,
-  },
-  {
-    id: 3,
-    name: 'Tech Park Zone C',
-    address: '789 Innovation Blvd, Tech District',
-    price: 4,
-    rating: 4.9,
-    reviews: 312,
-    available: 5,
-    distance: '1.2 km',
-    image: 'https://images.unsplash.com/photo-1494905998402-395d579af97f?w=400&h=300&fit=crop',
-    features: ['EV Charging', 'Shaded', 'Car Wash'],
-    verified: true,
-  },
-  {
-    id: 4,
-    name: 'Airport Short-term Parking',
-    address: 'Airport Road, Terminal 1',
-    price: 8,
-    rating: 4.5,
-    reviews: 567,
-    available: 24,
-    distance: '2.5 km',
-    image: 'https://images.unsplash.com/photo-1563007618-9841fd2c3b14?w=400&h=300&fit=crop',
-    features: ['24/7 Access', ' Shuttle', 'Short-term'],
-    verified: true,
-  },
-  {
-    id: 5,
-    name: 'Harbor View Complex',
-    address: '321 Marina Drive, Harbor Area',
-    price: 6,
-    rating: 4.7,
-    reviews: 145,
-    available: 3,
-    distance: '1.8 km',
-    image: 'https://images.unsplash.com/photo-1508109777868-5fb7b6b24f8f?w=400&h=300&fit=crop',
-    features: ['Sea View', 'Security', '24/7 Access'],
-    verified: false,
-  },
-  {
-    id: 6,
-    name: 'Stadium Event Parking',
-    address: '999 Sports Complex, East Side',
-    price: 10,
-    rating: 4.4,
-    reviews: 89,
-    available: 50,
-    distance: '3.2 km',
-    image: 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=400&h=300&fit=crop',
-    features: ['Event Parking', 'Large Vehicles', 'Cashless'],
-    verified: true,
-  },
-];
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png'
+});
 
-const filters = [
-  { label: 'Price', options: ['$0-$5', '$5-$10', '$10+'] },
-  { label: 'Rating', options: ['4.5+', '4.0+', '3.5+'] },
-  { label: 'Features', options: ['EV Charging', 'Covered', '24/7 Access'] },
-  { label: 'Distance', options: ['< 1km', '< 3km', '< 5km'] },
-];
+const FitBounds = ({ points }) => {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!points.length) return;
+    if (points.length === 1) {
+      map.setView(points[0], 14);
+      return;
+    }
+
+    const bounds = L.latLngBounds(points);
+    map.fitBounds(bounds, { padding: [40, 40] });
+  }, [map, points]);
+
+  return null;
+};
+
+let razorpayScriptPromise;
+
+const loadRazorpayScript = () => {
+  if (window.Razorpay) {
+    return Promise.resolve(true);
+  }
+
+  if (!razorpayScriptPromise) {
+    razorpayScriptPromise = new Promise((resolve) => {
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.async = true;
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+  }
+
+  return razorpayScriptPromise;
+};
 
 const ExploreParking = () => {
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [activeFilters, setActiveFilters] = useState({});
+  const { user } = useContext(AuthContext);
+  const socket = useContext(SocketContext);
+  const [parkingSpots, setParkingSpots] = useState([]);
+  const [cars, setCars] = useState([]);
+  const [cities, setCities] = useState([]);
+  const [selectedCity, setSelectedCity] = useState('');
+  const [searchText, setSearchText] = useState('');
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+  const [filters, setFilters] = useState({
+    minPrice: '',
+    maxPrice: '',
+    parkingType: '',
+    hasCCTV: false,
+    hasEVCharging: false,
+    startTime: '',
+    endTime: ''
+  });
+  const [selectedSpot, setSelectedSpot] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [favoriteIds, setFavoriteIds] = useState([]);
+  const [bookingSubmitting, setBookingSubmitting] = useState(false);
+  const [bookingForm, setBookingForm] = useState({
+    startTime: '',
+    endTime: '',
+    carId: '',
+    specialRequests: ''
+  });
+
+  const fetchParking = async (city = '', extra = {}) => {
+    setLoading(true);
+    try {
+      const params = {
+        ...(city ? { city } : {}),
+        ...(extra.minPrice ? { minPrice: extra.minPrice } : {}),
+        ...(extra.maxPrice ? { maxPrice: extra.maxPrice } : {}),
+        ...(extra.parkingType ? { parkingType: extra.parkingType } : {}),
+        ...(extra.hasCCTV ? { hasCCTV: true } : {}),
+        ...(extra.hasEVCharging ? { hasEVCharging: true } : {}),
+        ...(extra.startTime ? { startTime: extra.startTime } : {}),
+        ...(extra.endTime ? { endTime: extra.endTime } : {})
+      };
+      const response = await parkingAPI.getAll(params);
+      const list = response?.data?.data || [];
+      setParkingSpots(list);
+      setSelectedSpot(list.length > 0 ? list[0] : null);
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to load parking spots');
+      setParkingSpots([]);
+      setSelectedSpot(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchCities = async () => {
+    try {
+      const response = await parkingAPI.getCities();
+      setCities(response?.data?.data || []);
+    } catch (error) {
+      setCities([]);
+    }
+  };
+
+  const fetchCars = async () => {
+    try {
+      const response = await carAPI.getAll();
+      setCars(response?.data?.data || []);
+    } catch (error) {
+      setCars([]);
+    }
+  };
+
+  const fetchFavorites = async () => {
+    try {
+      const response = await favoriteAPI.getMy();
+      const list = response?.data?.data || [];
+      setFavoriteIds(list.map((item) => item.parkingSpot?._id).filter(Boolean));
+    } catch (error) {
+      setFavoriteIds([]);
+    }
+  };
+
+  useEffect(() => {
+    fetchParking();
+    fetchCities();
+    fetchCars();
+    fetchFavorites();
+  }, []);
+
+  useEffect(() => {
+    if (!socket) return undefined;
+
+    const applySpotAvailabilityUpdate = ({ parkingId, availableSlots }) => {
+      if (!parkingId || typeof availableSlots !== 'number') return;
+
+      setParkingSpots((prev) =>
+        prev.map((spot) =>
+          spot._id === parkingId
+            ? {
+                ...spot,
+                availableSlots
+              }
+            : spot
+        )
+      );
+
+      setSelectedSpot((prev) =>
+        prev?._id === parkingId
+          ? {
+              ...prev,
+              availableSlots
+            }
+          : prev
+      );
+    };
+
+    const onSlotUpdated = (payload) => {
+      applySpotAvailabilityUpdate(payload || {});
+    };
+
+    const onBookingConfirmed = (payload) => {
+      applySpotAvailabilityUpdate(payload || {});
+    };
+
+    socket.on('slotUpdated', onSlotUpdated);
+    socket.on('bookingConfirmed', onBookingConfirmed);
+
+    return () => {
+      socket.off('slotUpdated', onSlotUpdated);
+      socket.off('bookingConfirmed', onBookingConfirmed);
+    };
+  }, [socket]);
+
+  const filteredSpots = useMemo(() => {
+    let list = parkingSpots;
+
+    if (showFavoritesOnly) {
+      list = list.filter((spot) => favoriteIds.includes(spot._id));
+    }
+
+    if (!searchText.trim()) return list;
+    const q = searchText.toLowerCase();
+    return list.filter(
+      (spot) =>
+        spot.title?.toLowerCase().includes(q) ||
+        spot.address?.toLowerCase().includes(q) ||
+        spot.city?.toLowerCase().includes(q)
+    );
+  }, [favoriteIds, parkingSpots, searchText, showFavoritesOnly]);
+
+  const markerData = useMemo(() => {
+    return filteredSpots
+      .map((spot) => {
+        const coords = spot?.location?.coordinates;
+        if (!Array.isArray(coords) || coords.length !== 2) return null;
+        const lng = Number(coords[0]);
+        const lat = Number(coords[1]);
+        if (Number.isNaN(lat) || Number.isNaN(lng)) return null;
+        return {
+          spot,
+          position: [lat, lng]
+        };
+      })
+      .filter(Boolean);
+  }, [filteredSpots]);
+
+  const mapCenter = markerData.length > 0 ? markerData[0].position : [20.5937, 78.9629];
+  const mapPoints = markerData.map((entry) => entry.position);
+
+  const bookingSummary = useMemo(() => {
+    const start = bookingForm.startTime ? new Date(bookingForm.startTime) : null;
+    const end = bookingForm.endTime ? new Date(bookingForm.endTime) : null;
+
+    if (!start || !end || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
+      return { hours: 0, amount: 0 };
+    }
+
+    const hours = Math.ceil((end - start) / (1000 * 60 * 60));
+    const amount = Number(selectedSpot?.pricePerHour || 0) * hours;
+    return { hours, amount };
+  }, [bookingForm.endTime, bookingForm.startTime, selectedSpot?.pricePerHour]);
+
+  const openRazorpayCheckout = ({ booking, order }) => {
+    const fallbackKey = process.env.REACT_APP_RAZORPAY_KEY_ID;
+    const key = order?.key || fallbackKey;
+
+    if (!key) {
+      toast.error('Razorpay key is missing. Please configure REACT_APP_RAZORPAY_KEY_ID.');
+      return;
+    }
+
+    const razorpay = new window.Razorpay({
+      key,
+      amount: order.amount,
+      currency: order.currency || 'INR',
+      name: 'SPOT-ON Parking',
+      description: `Booking ${booking.bookingCode}`,
+      order_id: order.id,
+      prefill: {
+        name: user?.name || '',
+        email: user?.email || '',
+        contact: user?.phone || ''
+      },
+      notes: {
+        bookingId: booking._id,
+        bookingCode: booking.bookingCode
+      },
+      theme: {
+        color: '#0284c7'
+      },
+      handler: async (paymentResponse) => {
+        try {
+          await bookingAPI.verifyPayment({
+            razorpay_payment_id: paymentResponse.razorpay_payment_id,
+            razorpay_order_id: paymentResponse.razorpay_order_id,
+            razorpay_signature: paymentResponse.razorpay_signature,
+            bookingId: booking._id
+          });
+          toast.success('Booking confirmed and payment verified');
+          setBookingForm({
+            startTime: '',
+            endTime: '',
+            carId: '',
+            specialRequests: ''
+          });
+          await fetchParking(selectedCity, filters);
+        } catch (error) {
+          toast.error(error.response?.data?.message || 'Payment verification failed');
+        }
+      },
+      modal: {
+        ondismiss: () => {
+          toast('Payment cancelled. Booking remains pending in My Bookings.');
+        }
+      }
+    });
+
+    razorpay.on('payment.failed', (event) => {
+      const message = event?.error?.description || 'Payment failed';
+      toast.error(message);
+    });
+
+    razorpay.open();
+  };
+
+  const handleCreateBooking = async () => {
+    if (!selectedSpot?._id) {
+      toast.error('Please select a parking spot first');
+      return;
+    }
+
+    if (!bookingForm.startTime || !bookingForm.endTime) {
+      toast.error('Please choose start and end time');
+      return;
+    }
+
+    const start = new Date(bookingForm.startTime);
+    const end = new Date(bookingForm.endTime);
+
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      toast.error('Invalid booking time');
+      return;
+    }
+
+    if (end <= start) {
+      toast.error('End time must be after start time');
+      return;
+    }
+
+    const scriptLoaded = await loadRazorpayScript();
+    if (!scriptLoaded) {
+      toast.error('Unable to load Razorpay checkout');
+      return;
+    }
+
+    setBookingSubmitting(true);
+    try {
+      const response = await bookingAPI.create({
+        parkingSpotId: selectedSpot._id,
+        carId: bookingForm.carId || undefined,
+        startTime: start.toISOString(),
+        endTime: end.toISOString(),
+        specialRequests: bookingForm.specialRequests.trim() || undefined
+      });
+
+      const booking = response?.data?.data?.booking;
+      const order = response?.data?.data?.order;
+
+      if (!booking || !order?.id) {
+        toast.error('Booking created but payment order is missing');
+        return;
+      }
+
+      openRazorpayCheckout({ booking, order });
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to create booking');
+    } finally {
+      setBookingSubmitting(false);
+    }
+  };
+
+  const isFavorite = (parkingId) => favoriteIds.includes(parkingId);
+
+  const toggleFavorite = async (parkingId) => {
+    const currentlyFavorite = isFavorite(parkingId);
+    try {
+      if (currentlyFavorite) {
+        await favoriteAPI.remove(parkingId);
+        setFavoriteIds((prev) => prev.filter((id) => id !== parkingId));
+        toast.success('Removed from favorites');
+      } else {
+        await favoriteAPI.add(parkingId);
+        setFavoriteIds((prev) => [...prev, parkingId]);
+        toast.success('Added to favorites');
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to update favorites');
+    }
+  };
 
   return (
     <MainLayout>
       <div className="space-y-6">
-        {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Explore Parking</h1>
-            <p className="text-gray-500 mt-1">Find and book the perfect parking spot near you</p>
+            <p className="text-gray-500 mt-1">Live map with dynamic parking markers.</p>
           </div>
-          <div className="flex items-center gap-3">
-            <button className="px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-gray-700 font-medium hover:bg-gray-50 transition-colors shadow-sm flex items-center gap-2">
-              <FiMapPin className="w-4 h-4" />
-              Map View
-            </button>
-            <button 
-              onClick={() => setIsFilterOpen(!isFilterOpen)}
-              className="px-4 py-2.5 bg-primary-600 text-white rounded-xl font-medium hover:bg-primary-700 transition-colors shadow-lg shadow-primary-500/30 flex items-center gap-2"
-            >
-              <FiFilter className="w-4 h-4" />
-              Filters
-            </button>
-          </div>
+          <select
+            value={selectedCity}
+            onChange={async (e) => {
+              const city = e.target.value;
+              setSelectedCity(city);
+              await fetchParking(city, filters);
+            }}
+            className="px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-gray-700"
+          >
+            <option value="">All Cities</option>
+            {cities.map((city) => (
+              <option key={city} value={city}>
+                {city}
+              </option>
+            ))}
+          </select>
         </div>
 
-        {/* Search Bar */}
         <div className="relative max-w-2xl">
           <FiSearch className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
           <input
             type="text"
-            placeholder="Search by location, spot name, or address..."
-            className="w-full pl-12 pr-4 py-4 bg-white border border-gray-200 rounded-2xl focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all shadow-sm text-gray-700 placeholder-gray-400"
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            placeholder="Search by title, address, or city..."
+            className="w-full pl-12 pr-4 py-4 bg-white border border-gray-200 rounded-2xl"
           />
-          <button className="absolute right-2 top-1/2 -translate-y-1/2 px-4 py-2 bg-primary-600 text-white rounded-xl font-medium hover:bg-primary-700 transition-colors">
-            Search
-          </button>
         </div>
 
-        {/* Active Filters */}
-        {Object.keys(activeFilters).length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {Object.entries(activeFilters).map(([key, value]) => (
-              <span key={key} className="px-3 py-1.5 bg-primary-100 text-primary-700 rounded-full text-sm font-medium flex items-center gap-2">
-                {key}: {value}
-                <button 
-                  onClick={() => setActiveFilters(prev => ({ ...prev, [key]: null }))}
-                  className="hover:text-primary-900"
-                >
-                  ×
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
+        <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+          <input
+            type="checkbox"
+            checked={showFavoritesOnly}
+            onChange={(e) => setShowFavoritesOnly(e.target.checked)}
+          />
+          Show favorites only
+        </label>
 
-        {/* Filters Dropdown */}
-        <AnimatePresence>
-          {isFilterOpen && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="bg-white rounded-2xl shadow-card border border-gray-100 p-6"
-            >
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                {filters.map((filter) => (
-                  <div key={filter.label}>
-                    <h3 className="font-semibold text-gray-900 mb-3">{filter.label}</h3>
-                    <div className="space-y-2">
-                      {filter.options.map((option) => (
-                        <label key={option} className="flex items-center gap-2 cursor-pointer">
-                          <input 
-                            type="checkbox" 
-                            className="w-4 h-4 text-primary-600 rounded border-gray-300 focus:ring-primary-500"
-                          />
-                          <span className="text-sm text-gray-600">{option}</span>
-                        </label>
-                      ))}
-                    </div>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <input
+            type="number"
+            placeholder="Min price"
+            value={filters.minPrice}
+            onChange={(e) => setFilters((prev) => ({ ...prev, minPrice: e.target.value }))}
+            className="px-3 py-2 border border-gray-200 rounded-xl"
+          />
+          <input
+            type="number"
+            placeholder="Max price"
+            value={filters.maxPrice}
+            onChange={(e) => setFilters((prev) => ({ ...prev, maxPrice: e.target.value }))}
+            className="px-3 py-2 border border-gray-200 rounded-xl"
+          />
+          <select
+            value={filters.parkingType}
+            onChange={(e) => setFilters((prev) => ({ ...prev, parkingType: e.target.value }))}
+            className="px-3 py-2 border border-gray-200 rounded-xl"
+          >
+            <option value="">Any Type</option>
+            <option value="open">Open</option>
+            <option value="covered">Covered</option>
+          </select>
+          <button
+            type="button"
+            onClick={() => fetchParking(selectedCity, filters)}
+            className="px-3 py-2 bg-primary-600 text-white rounded-xl"
+          >
+            Apply Filters
+          </button>
+          <input
+            type="datetime-local"
+            value={filters.startTime}
+            onChange={(e) => setFilters((prev) => ({ ...prev, startTime: e.target.value }))}
+            className="px-3 py-2 border border-gray-200 rounded-xl md:col-span-2"
+          />
+          <input
+            type="datetime-local"
+            value={filters.endTime}
+            onChange={(e) => setFilters((prev) => ({ ...prev, endTime: e.target.value }))}
+            className="px-3 py-2 border border-gray-200 rounded-xl md:col-span-2"
+          />
+          <label className="text-sm text-gray-700 flex items-center gap-2 md:col-span-2">
+            <input
+              type="checkbox"
+              checked={filters.hasCCTV}
+              onChange={(e) => setFilters((prev) => ({ ...prev, hasCCTV: e.target.checked }))}
+            />
+            CCTV available
+          </label>
+          <label className="text-sm text-gray-700 flex items-center gap-2 md:col-span-2">
+            <input
+              type="checkbox"
+              checked={filters.hasEVCharging}
+              onChange={(e) => setFilters((prev) => ({ ...prev, hasEVCharging: e.target.checked }))}
+            />
+            EV charging
+          </label>
+        </div>
+
+        {loading ? <p className="text-sm text-gray-500">Loading parking spots...</p> : null}
+        {!loading && filteredSpots.length === 0 ? <p className="text-sm text-gray-500">No parking spots found.</p> : null}
+
+        <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
+          <div className="xl:col-span-3 bg-white rounded-2xl border border-gray-100 shadow-card overflow-hidden">
+            <MapContainer center={mapCenter} zoom={12} style={{ height: 560, width: '100%' }}>
+              <TileLayer
+                attribution='&copy; OpenStreetMap contributors'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              />
+              <FitBounds points={mapPoints} />
+              {markerData.map(({ spot, position }) => (
+                <Marker
+                  key={spot._id}
+                  position={position}
+                  eventHandlers={{ click: () => setSelectedSpot(spot) }}
+                >
+                  <Popup>
+                    <strong>{spot.title}</strong>
+                    <br />
+                    {spot.city}
+                    <br />
+                    Slots: {spot.availableSlots}
+                  </Popup>
+                </Marker>
+              ))}
+            </MapContainer>
+          </div>
+
+          <div className="xl:col-span-2 space-y-4">
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-card p-5">
+              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <FiInfo />
+                Spot Details
+              </h2>
+              {!selectedSpot ? (
+                <p className="text-sm text-gray-500 mt-4">Click a marker or card to view details.</p>
+              ) : (
+                <div className="mt-4 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-semibold text-gray-900">{selectedSpot.title}</p>
+                    <button
+                      type="button"
+                      onClick={() => toggleFavorite(selectedSpot._id)}
+                      className={`px-2.5 py-1.5 text-xs rounded-lg border flex items-center gap-1 ${
+                        isFavorite(selectedSpot._id)
+                          ? 'bg-red-50 border-red-200 text-red-700'
+                          : 'bg-gray-50 border-gray-200 text-gray-700'
+                      }`}
+                    >
+                      <FiHeart className={isFavorite(selectedSpot._id) ? 'fill-current' : ''} />
+                      {isFavorite(selectedSpot._id) ? 'Saved' : 'Save'}
+                    </button>
                   </div>
+                  <p className="text-sm text-gray-600 flex items-center gap-1">
+                    <FiMapPin className="w-4 h-4" />
+                    {selectedSpot.address}, {selectedSpot.city}, {selectedSpot.state}
+                  </p>
+                  <p className="text-sm text-gray-600 flex items-center gap-1">
+                    <FiDollarSign className="w-4 h-4" />
+                    {selectedSpot.pricePerHour}/hour
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    Slots: {selectedSpot.availableSlots}/{selectedSpot.totalSlots}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    Vehicle Types: {(selectedSpot.vehicleTypes || []).join(', ') || 'N/A'}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    Amenities: {(selectedSpot.amenities || []).join(', ') || 'N/A'}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    Type: {selectedSpot.parkingType || 'open'} | CCTV: {selectedSpot.hasCCTV ? 'Yes' : 'No'} | EV:{' '}
+                    {selectedSpot.hasEVCharging ? 'Yes' : 'No'}
+                  </p>
+                  <div className="pt-4 border-t border-gray-100 space-y-3">
+                    <h3 className="text-sm font-semibold text-gray-900">Create Booking</h3>
+                    <div className="grid grid-cols-1 gap-2">
+                      <input
+                        type="datetime-local"
+                        value={bookingForm.startTime}
+                        onChange={(e) =>
+                          setBookingForm((prev) => ({
+                            ...prev,
+                            startTime: e.target.value
+                          }))
+                        }
+                        className="px-3 py-2 border border-gray-200 rounded-xl text-sm"
+                      />
+                      <input
+                        type="datetime-local"
+                        value={bookingForm.endTime}
+                        onChange={(e) =>
+                          setBookingForm((prev) => ({
+                            ...prev,
+                            endTime: e.target.value
+                          }))
+                        }
+                        className="px-3 py-2 border border-gray-200 rounded-xl text-sm"
+                      />
+                      <select
+                        value={bookingForm.carId}
+                        onChange={(e) =>
+                          setBookingForm((prev) => ({
+                            ...prev,
+                            carId: e.target.value
+                          }))
+                        }
+                        className="px-3 py-2 border border-gray-200 rounded-xl text-sm"
+                      >
+                        <option value="">No car selected (optional)</option>
+                        {cars.map((car) => (
+                          <option key={car._id} value={car._id}>
+                            {car.name} ({car.numberPlate})
+                          </option>
+                        ))}
+                      </select>
+                      <textarea
+                        value={bookingForm.specialRequests}
+                        onChange={(e) =>
+                          setBookingForm((prev) => ({
+                            ...prev,
+                            specialRequests: e.target.value
+                          }))
+                        }
+                        rows={2}
+                        placeholder="Special requests (optional)"
+                        className="px-3 py-2 border border-gray-200 rounded-xl text-sm resize-none"
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      Estimated: {bookingSummary.hours} hour(s) | Rs. {bookingSummary.amount}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleCreateBooking}
+                      disabled={bookingSubmitting}
+                      className="w-full px-3 py-2 bg-primary-600 text-white rounded-xl text-sm disabled:opacity-60"
+                    >
+                      {bookingSubmitting ? 'Creating booking...' : 'Book & Pay'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-card p-5 max-h-[360px] overflow-auto">
+              <h2 className="text-lg font-semibold text-gray-900 mb-3">Results ({filteredSpots.length})</h2>
+              <div className="space-y-3">
+                {filteredSpots.map((spot, index) => (
+                  <motion.button
+                    key={spot._id}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.03 }}
+                    type="button"
+                    onClick={() => setSelectedSpot(spot)}
+                    className={`w-full text-left border rounded-xl p-3 transition-colors ${
+                      selectedSpot?._id === spot._id ? 'border-primary-500 bg-primary-50/40' : 'border-gray-200'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-medium text-gray-900">{spot.title}</p>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleFavorite(spot._id);
+                        }}
+                        className={`p-1.5 rounded-lg border ${
+                          isFavorite(spot._id)
+                            ? 'bg-red-50 border-red-200 text-red-700'
+                            : 'bg-gray-50 border-gray-200 text-gray-600'
+                        }`}
+                      >
+                        <FiHeart className={`w-3.5 h-3.5 ${isFavorite(spot._id) ? 'fill-current' : ''}`} />
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-500">{spot.city}</p>
+                    <p className="text-xs text-gray-500">Slots: {spot.availableSlots}</p>
+                  </motion.button>
                 ))}
               </div>
-              <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
-                <button className="px-4 py-2 text-gray-600 hover:text-gray-900 font-medium">
-                  Clear All
-                </button>
-                <button className="px-4 py-2 bg-primary-600 text-white rounded-xl font-medium hover:bg-primary-700 transition-colors">
-                  Apply Filters
-                </button>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Results Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {parkingSpots.map((spot, index) => (
-            <motion.div
-              key={spot.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, delay: index * 0.1 }}
-              className="bg-white rounded-2xl shadow-card border border-gray-100 overflow-hidden hover:shadow-premium transition-all duration-300 group cursor-pointer"
-            >
-              <div className="relative h-48 overflow-hidden">
-                <img
-                  src={spot.image}
-                  alt={spot.name}
-                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                />
-                <div className="absolute top-4 left-4 flex items-center gap-2">
-                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${spot.available > 10 ? 'bg-green-500 text-white' : 'bg-yellow-500 text-white'}`}>
-                    {spot.available} spots left
-                  </span>
-                </div>
-                {spot.verified && (
-                  <span className="absolute top-4 right-4 px-2 py-1 bg-blue-500 text-white rounded-full text-xs font-medium flex items-center gap-1">
-                    ✓ Verified
-                  </span>
-                )}
-                <button 
-                  className="absolute bottom-4 right-4 w-10 h-10 bg-white rounded-full shadow-lg flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-                >
-                  <FiHeart className="w-5 h-5" />
-                </button>
-              </div>
-              <div className="p-6">
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <h3 className="font-bold text-gray-900 text-lg">{spot.name}</h3>
-                    <p className="text-gray-500 text-sm flex items-center gap-1 mt-1">
-                      <FiMapPin className="w-4 h-4" />
-                      {spot.address}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-4 text-sm mb-4">
-                  <span className="flex items-center gap-1 text-yellow-600">
-                    <FiStar className="w-4 h-4 fill-current" />
-                    <span className="font-semibold">{spot.rating}</span>
-                    <span className="text-gray-400">({spot.reviews})</span>
-                  </span>
-                  <span className="flex items-center gap-1 text-gray-500">
-                    <FiNavigation className="w-4 h-4" />
-                    {spot.distance}
-                  </span>
-                </div>
-                <div className="flex flex-wrap gap-2 mb-4">
-                  {spot.features.slice(0, 3).map((feature) => (
-                    <span key={feature} className="px-2 py-1 bg-gray-100 text-gray-600 rounded-lg text-xs">
-                      {feature}
-                    </span>
-                  ))}
-                </div>
-                <div className="flex items-center justify-between pt-4 border-t border-gray-100">
-                  <div>
-                    <span className="text-2xl font-bold text-gray-900">${spot.price}</span>
-                    <span className="text-gray-500 text-sm">/hr</span>
-                  </div>
-                  <button className="px-4 py-2 bg-primary-600 text-white rounded-xl font-medium hover:bg-primary-700 transition-colors flex items-center gap-2">
-                    <FiCalendar className="w-4 h-4" />
-                    Book Now
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          ))}
-        </div>
-
-        {/* Load More */}
-        <div className="text-center py-8">
-          <button className="px-8 py-3 bg-white border border-gray-200 rounded-xl text-gray-700 font-medium hover:bg-gray-50 transition-colors shadow-sm">
-            Load More Spots
-          </button>
+            </div>
+          </div>
         </div>
       </div>
     </MainLayout>

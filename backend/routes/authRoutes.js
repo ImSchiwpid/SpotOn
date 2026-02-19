@@ -5,6 +5,7 @@ import {
   logout,
   getMe,
   updateProfile,
+  updateProfileImage,
   updatePassword,
   googleCallback
 } from '../controllers/authController.js';
@@ -12,6 +13,7 @@ import { protect } from '../middleware/auth.js';
 import { registerValidation, loginValidation } from '../middleware/validation.js';
 import { authLimiter } from '../middleware/rateLimiter.js';
 import passport from 'passport';
+import { upload } from '../config/cloudinary.js';
 
 const router = express.Router();
 
@@ -31,6 +33,7 @@ router.use(protect);
 router.post('/logout', logout);
 router.get('/me', getMe);
 router.put('/profile', updateProfile);
+router.put('/profile-image', upload.single('profileImage'), updateProfileImage);
 router.put('/password', updatePassword);
 
 export default router;

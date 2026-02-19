@@ -3,11 +3,16 @@ import multer from 'multer';
 import { Readable } from 'stream';
 
 // Configure Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET
-});
+const cloudinaryConfig = process.env.CLOUDINARY_URL
+  ? { secure: true }
+  : {
+      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+      api_key: process.env.CLOUDINARY_API_KEY,
+      api_secret: process.env.CLOUDINARY_API_SECRET,
+      secure: true
+    };
+
+cloudinary.config(cloudinaryConfig);
 
 // Multer memory storage
 const storage = multer.memoryStorage();

@@ -21,12 +21,20 @@ export const registerValidation = [
   body('name').trim().notEmpty().withMessage('Name is required'),
   body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
   body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+  body('role')
+    .optional()
+    .isIn(['customer', 'parking_owner'])
+    .withMessage('Role must be customer or parking_owner'),
   validate
 ];
 
 export const loginValidation = [
   body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
   body('password').notEmpty().withMessage('Password is required'),
+  body('role')
+    .optional()
+    .isIn(['customer', 'parking_owner', 'admin'])
+    .withMessage('Invalid role selected'),
   validate
 ];
 
@@ -48,7 +56,8 @@ export const bookingValidation = [
   body('parkingSpotId').isMongoId().withMessage('Valid parking spot ID required'),
   body('startTime').isISO8601().withMessage('Valid start time required'),
   body('endTime').isISO8601().withMessage('Valid end time required'),
-  body('hours').isInt({ min: 1 }).withMessage('Minimum 1 hour booking required'),
+  body('carId').optional().isMongoId().withMessage('Valid car ID required'),
+  body('specialRequests').optional().isString().isLength({ max: 500 }).withMessage('Special requests cannot exceed 500 characters'),
   validate
 ];
 
@@ -74,3 +83,9 @@ export const mongoIdValidation = [
   param('id').isMongoId().withMessage('Invalid ID format'),
   validate
 ];
+
+export const parkingIdValidation = [
+  param('parkingId').isMongoId().withMessage('Invalid parking spot ID format'),
+  validate
+];
+

@@ -79,6 +79,41 @@ const parkingSpotSchema = new mongoose.Schema({
     type: String,
     trim: true
   }],
+  parkingType: {
+    type: String,
+    enum: ['covered', 'open'],
+    default: 'open'
+  },
+  hasCCTV: {
+    type: Boolean,
+    default: false
+  },
+  hasEVCharging: {
+    type: Boolean,
+    default: false
+  },
+  availability: {
+    startHour: {
+      type: Number,
+      min: 0,
+      max: 23,
+      default: 0
+    },
+    endHour: {
+      type: Number,
+      min: 1,
+      max: 24,
+      default: 24
+    }
+  },
+  isMaintenanceMode: {
+    type: Boolean,
+    default: false
+  },
+  maintenanceReason: {
+    type: String,
+    trim: true
+  },
   vehicleTypes: [{
     type: String,
     enum: ['car', 'bike', 'truck', 'van'],
@@ -119,6 +154,7 @@ const parkingSpotSchema = new mongoose.Schema({
 parkingSpotSchema.index({ location: '2dsphere' });
 parkingSpotSchema.index({ city: 1 });
 parkingSpotSchema.index({ owner: 1 });
+parkingSpotSchema.index({ parkingType: 1, hasCCTV: 1, hasEVCharging: 1 });
 
 // Virtual for bookings
 parkingSpotSchema.virtual('bookings', {
@@ -131,6 +167,9 @@ parkingSpotSchema.virtual('bookings', {
 parkingSpotSchema.pre('save', function(next) {
   if (this.availableSlots > this.totalSlots) {
     this.availableSlots = this.totalSlots;
+  }
+  if (this.availability && this.availability.startHour >= this.availability.endHour) {
+    return next(new Error('Availability startHour must be less than endHour'));
   }
   next();
 });

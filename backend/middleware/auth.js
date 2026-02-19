@@ -26,6 +26,9 @@ export const protect = async (req, res, next) => {
 
       // Get user from token
       req.user = await User.findById(decoded.id).select('-password');
+      if (req.user && req.user.role === 'user') {
+        req.user.role = 'customer';
+      }
 
       if (!req.user) {
         return res.status(401).json({
@@ -93,6 +96,9 @@ export const optionalAuth = async (req, res, next) => {
       try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         req.user = await User.findById(decoded.id).select('-password');
+        if (req.user && req.user.role === 'user') {
+          req.user.role = 'customer';
+        }
       } catch (error) {
         // Invalid token, but continue without user
         req.user = null;

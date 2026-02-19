@@ -1,5 +1,5 @@
+import 'dotenv/config';
 import express from 'express';
-import dotenv from 'dotenv';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import { createServer } from 'http';
@@ -17,9 +17,11 @@ import parkingRoutes from './routes/parkingRoutes.js';
 import bookingRoutes from './routes/bookingRoutes.js';
 import carRoutes from './routes/carRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
-
-// Load env vars
-dotenv.config();
+import ownerRoutes from './routes/ownerRoutes.js';
+import reviewRoutes from './routes/reviewRoutes.js';
+import complaintRoutes from './routes/complaintRoutes.js';
+import notificationRoutes from './routes/notificationRoutes.js';
+import favoriteRoutes from './routes/favoriteRoutes.js';
 
 // Connect to database
 connectDB();
@@ -98,6 +100,11 @@ app.use('/api/parking', parkingRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/cars', carRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/owner', ownerRoutes);
+app.use('/api/reviews', reviewRoutes);
+app.use('/api/complaints', complaintRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/favorites', favoriteRoutes);
 
 // Error handling
 app.use(notFound);

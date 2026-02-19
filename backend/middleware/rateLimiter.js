@@ -1,50 +1,54 @@
 import rateLimit from 'express-rate-limit';
 
-// General API rate limiter
-export const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // 100 requests per window
-  message: {
-    success: false,
+const isDevelopment = process.env.NODE_ENV !== 'production';
+
+const WINDOWS = {
+  short: 15 * 60 * 1000,
+  hourly: 60 * 60 * 1000
+};
+
+const LIMITS = {
+  api: {
+    windowMs: WINDOWS.short,
+    devMax: 10000,
+    prodMax: 100,
     message: 'Too many requests from this IP, please try again later.'
   },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-// Auth route rate limiter (stricter)
-export const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // 5 login attempts per window
-  message: {
-    success: false,
-    message: 'Too many login attempts, please try again after 15 minutes.'
+  auth: {
+    windowMs: WINDOWS.short,
+    devMax: 1000,
+    prodMax: 5,
+    message: 'Too many login attempts, please try again after 15 minutes.',
+    skipSuccessfulRequests: true
   },
-  skipSuccessfulRequests: true,
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-// Payment route rate limiter
-export const paymentLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 10, // 10 payment attempts per hour
-  message: {
-    success: false,
+  payment: {
+    windowMs: WINDOWS.hourly,
+    devMax: 500,
+    prodMax: 10,
     message: 'Too many payment attempts, please try again later.'
   },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-// File upload rate limiter
-export const uploadLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 20, // 20 uploads per hour
-  message: {
-    success: false,
+  upload: {
+    windowMs: WINDOWS.hourly,
+    devMax: 1000,
+    prodMax: 20,
     message: 'Too many upload attempts, please try again later.'
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
+  }
+};
+
+const createLimiter = ({ windowMs, devMax, prodMax, message, skipSuccessfulRequests = false }) =>
+  rateLimit({
+    windowMs,
+    max: isDevelopment ? devMax : prodMax,
+    message: {
+      success: false,
+      message
+    },
+    skipSuccessfulRequests,
+    standardHeaders: true,
+    legacyHeaders: false
+  });
+
+export const apiLimiter = createLimiter(LIMITS.api);
+export const authLimiter = createLimiter(LIMITS.auth);
+export const paymentLimiter = createLimiter(LIMITS.payment);
+export const uploadLimiter = createLimiter(LIMITS.upload);

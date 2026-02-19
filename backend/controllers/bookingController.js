@@ -3,6 +3,8 @@ import Booking from '../models/Booking.js';
 import ParkingSpot from '../models/ParkingSpot.js';
 import User from '../models/User.js';
 import Transaction from '../models/Transaction.js';
+import PlatformSetting from '../models/PlatformSetting.js';
+import { createNotification } from '../utils/notification.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { sendBookingConfirmation, sendCancellationEmail } from '../utils/sendEmail.js';
 import Razorpay from 'razorpay';
@@ -24,6 +26,23 @@ const getRazorpay = () => {
   });
 };
 
+const getCommissionPercent = async () => {
+  const setting = await PlatformSetting.findOne({ key: 'default' }).select('commissionPercent');
+  return setting?.commissionPercent ?? 15;
+};
+
+const notifyAdmins = async (io, payloadBuilder) => {
+  const admins = await User.find({ role: 'admin', isActive: true }).select('_id');
+  const tasks = admins.map((admin) =>
+    createNotification({
+      userId: admin._id,
+      ...payloadBuilder(admin._id),
+      io
+    })
+  );
+  await Promise.all(tasks);
+};
+
 // @desc    Create booking and order
 // @route   POST /api/bookings
 // @access  Private
@@ -37,6 +56,13 @@ export const createBooking = asyncHandler(async (req, res) => {
     return res.status(404).json({
       success: false,
       message: 'Parking spot not found'
+    });
+  }
+
+  if (!parkingSpot.isApproved || !parkingSpot.isActive || parkingSpot.isMaintenanceMode) {
+    return res.status(400).json({
+      success: false,
+      message: 'This parking spot is currently unavailable for booking'
     });
   }
 
@@ -81,6 +107,22 @@ export const createBooking = asyncHandler(async (req, res) => {
   // Calculate total amount on backend
   const totalAmount = parkingSpot.pricePerHour * calculatedHours;
 
+  // Prevent overbooking for the same time window.
+  // Overlap condition: existing.start < newEnd && existing.end > newStart
+  const overlappingBookings = await Booking.countDocuments({
+    parkingSpot: parkingSpotId,
+    status: { $in: ['pending', 'confirmed'] },
+    startTime: { $lt: end },
+    endTime: { $gt: start }
+  });
+
+  if (overlappingBookings >= parkingSpot.totalSlots) {
+    return res.status(400).json({
+      success: false,
+      message: 'No slot available for the selected time range'
+    });
+  }
+
   // Check if slot is still available using atomic update
   // This prevents race conditions - only one concurrent request can decrement
   const updatedSpot = await ParkingSpot.findOneAndUpdate(
@@ -107,7 +149,8 @@ export const createBooking = asyncHandler(async (req, res) => {
     totalAmount,
     specialRequests,
     status: 'pending',
-    paymentStatus: 'pending'
+    paymentStatus: 'pending',
+    ownerDecision: 'pending'
   });
 
   // Populate for response
@@ -141,6 +184,35 @@ export const createBooking = asyncHandler(async (req, res) => {
     // Update booking with order ID
     booking.orderId = order.id;
     await booking.save();
+
+    // Notify booking creator
+    await createNotification({
+      userId: req.user.id,
+      title: 'Booking Created',
+      message: `Booking ${booking.bookingCode} created for ${booking.parkingSpot.title}. Complete payment to confirm.`,
+      type: 'booking',
+      metadata: { bookingId: booking._id, parkingId: booking.parkingSpot._id },
+      io: req.io
+    });
+
+    // Notify parking owner
+    if (String(parkingSpot.owner) !== String(req.user.id)) {
+      await createNotification({
+        userId: parkingSpot.owner,
+        title: 'New Booking Request',
+        message: `A new booking ${booking.bookingCode} was created for your spot.`,
+        type: 'booking',
+        metadata: { bookingId: booking._id, parkingId: booking.parkingSpot._id },
+        io: req.io
+      });
+    }
+
+    await notifyAdmins(req.io, () => ({
+      title: 'New Booking Created',
+      message: `Booking ${booking.bookingCode} created.`,
+      type: 'admin',
+      metadata: { bookingId: booking._id, parkingId: booking.parkingSpot._id }
+    }));
 
     res.status(201).json({
       success: true,
@@ -184,11 +256,32 @@ export const verifyPayment = asyncHandler(async (req, res) => {
     });
   }
 
+  if (booking.user._id.toString() !== req.user.id) {
+    return res.status(403).json({
+      success: false,
+      message: 'Not authorized to verify this payment'
+    });
+  }
+
+  if (booking.orderId && booking.orderId !== razorpay_order_id) {
+    return res.status(400).json({
+      success: false,
+      message: 'Payment order does not match booking'
+    });
+  }
+
   // Double Payment Protection - Check if already paid
   if (booking.paymentStatus === 'paid') {
     return res.status(400).json({
       success: false,
       message: 'Payment already processed'
+    });
+  }
+
+  if (!process.env.RAZORPAY_KEY_SECRET) {
+    return res.status(503).json({
+      success: false,
+      message: 'Payment system is currently unavailable'
     });
   }
 
@@ -235,11 +328,12 @@ export const verifyPayment = asyncHandler(async (req, res) => {
   booking.razorpaySignature = razorpay_signature;
   booking.status = 'confirmed';
   booking.paymentStatus = 'paid';
+  booking.invoiceNumber = booking.invoiceNumber || `INV-${Date.now()}-${booking.bookingCode}`;
   await booking.save();
 
   // Credit owner's wallet with platform fee calculation
-  const PLATFORM_FEE_PERCENT = 15; // 15% platform fee
-  const platformFee = (booking.totalAmount * PLATFORM_FEE_PERCENT) / 100;
+  const commissionPercent = await getCommissionPercent();
+  const platformFee = (booking.totalAmount * commissionPercent) / 100;
   const ownerEarnings = booking.totalAmount - platformFee;
 
   const owner = await User.findById(parkingSpot.owner);
@@ -261,7 +355,8 @@ export const verifyPayment = asyncHandler(async (req, res) => {
     metadata: {
       originalAmount: booking.totalAmount,
       platformFee,
-      parkingSpot: parkingSpot.name
+      platformFeePercent: commissionPercent,
+      parkingSpot: parkingSpot.title
     }
   });
 
@@ -285,6 +380,31 @@ export const verifyPayment = asyncHandler(async (req, res) => {
   } catch (error) {
     console.error('Error sending confirmation email:', error);
   }
+
+  await createNotification({
+    userId: booking.user._id,
+    title: 'Booking Confirmed',
+    message: `Payment successful for booking ${booking.bookingCode}. Your spot is confirmed.`,
+    type: 'payment',
+    metadata: { bookingId: booking._id, parkingId: booking.parkingSpot._id },
+    io: req.io
+  });
+
+  await createNotification({
+    userId: owner._id,
+    title: 'Payment Received',
+    message: `You received earnings for booking ${booking.bookingCode}.`,
+    type: 'payment',
+    metadata: { bookingId: booking._id, amount: ownerEarnings },
+    io: req.io
+  });
+
+  await notifyAdmins(req.io, () => ({
+    title: 'Booking Paid',
+    message: `Booking ${booking.bookingCode} payment verified.`,
+    type: 'admin',
+    metadata: { bookingId: booking._id, parkingId: booking.parkingSpot._id }
+  }));
 
   // Emit socket event
   if (req.io) {
@@ -432,8 +552,8 @@ export const cancelBooking = asyncHandler(async (req, res) => {
 
       // Debit owner's wallet (reverse the earning)
       const owner = await User.findById(parkingSpot.owner);
-      const PLATFORM_FEE_PERCENT = 15;
-      const platformFee = (booking.totalAmount * PLATFORM_FEE_PERCENT) / 100;
+      const commissionPercent = await getCommissionPercent();
+      const platformFee = (booking.totalAmount * commissionPercent) / 100;
       const refundAmount = booking.totalAmount - platformFee;
 
       const balanceBefore = owner.walletBalance;
@@ -487,6 +607,26 @@ export const cancelBooking = asyncHandler(async (req, res) => {
     await sendCancellationEmail(booking, booking.user, booking.parkingSpot);
   } catch (error) {
     console.error('Error sending cancellation email:', error);
+  }
+
+  await createNotification({
+    userId: booking.user._id,
+    title: 'Booking Cancelled',
+    message: `Booking ${booking.bookingCode} has been cancelled.`,
+    type: 'booking',
+    metadata: { bookingId: booking._id, parkingId: booking.parkingSpot._id },
+    io: req.io
+  });
+
+  if (booking.parkingSpot?.owner) {
+    await createNotification({
+      userId: booking.parkingSpot.owner,
+      title: 'Booking Cancelled',
+      message: `A booking ${booking.bookingCode} for your spot was cancelled.`,
+      type: 'booking',
+      metadata: { bookingId: booking._id, parkingId: booking.parkingSpot._id },
+      io: req.io
+    });
   }
 
   res.status(200).json({
@@ -608,4 +748,99 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
       upcomingSlots
     }
   });
+});
+
+// @desc    Get customer payment history
+// @route   GET /api/bookings/payments/history
+// @access  Private
+export const getPaymentHistory = asyncHandler(async (req, res) => {
+  const bookings = await Booking.find({
+    user: req.user.id,
+    paymentStatus: { $in: ['paid', 'refunded'] }
+  })
+    .populate('parkingSpot', 'title city address')
+    .sort('-createdAt');
+
+  res.status(200).json({
+    success: true,
+    count: bookings.length,
+    data: bookings.map((booking) => ({
+      bookingId: booking._id,
+      bookingCode: booking.bookingCode,
+      invoiceNumber: booking.invoiceNumber,
+      amount: booking.totalAmount,
+      paymentStatus: booking.paymentStatus,
+      paymentId: booking.paymentId,
+      orderId: booking.orderId,
+      createdAt: booking.createdAt,
+      parkingSpot: booking.parkingSpot
+    }))
+  });
+});
+
+// @desc    Get booking invoice
+// @route   GET /api/bookings/:id/invoice
+// @access  Private
+export const getBookingInvoice = asyncHandler(async (req, res) => {
+  const booking = await Booking.findById(req.params.id)
+    .populate('parkingSpot', 'title address city state zipCode')
+    .populate('user', 'name email');
+
+  if (!booking) {
+    return res.status(404).json({ success: false, message: 'Booking not found' });
+  }
+
+  if (booking.user._id.toString() !== req.user.id && req.user.role !== 'admin') {
+    return res.status(403).json({ success: false, message: 'Not authorized to access this invoice' });
+  }
+
+  res.status(200).json({
+    success: true,
+    data: {
+      invoiceNumber: booking.invoiceNumber || `INV-${booking.bookingCode}`,
+      bookingCode: booking.bookingCode,
+      customer: booking.user,
+      parkingSpot: booking.parkingSpot,
+      startTime: booking.startTime,
+      endTime: booking.endTime,
+      hours: booking.hours,
+      amount: booking.totalAmount,
+      paymentStatus: booking.paymentStatus,
+      paymentId: booking.paymentId,
+      issuedAt: booking.updatedAt
+    }
+  });
+});
+
+// @desc    Mark booking as completed
+// @route   PUT /api/bookings/:id/complete
+// @access  Private
+export const markBookingCompleted = asyncHandler(async (req, res) => {
+  const booking = await Booking.findById(req.params.id).populate('parkingSpot', 'owner');
+  if (!booking) {
+    return res.status(404).json({ success: false, message: 'Booking not found' });
+  }
+
+  const isOwner = booking.parkingSpot.owner.toString() === req.user.id;
+  if (!isOwner && req.user.role !== 'admin') {
+    return res.status(403).json({ success: false, message: 'Not authorized to complete this booking' });
+  }
+
+  if (booking.status === 'cancelled' || booking.status === 'failed') {
+    return res.status(400).json({ success: false, message: 'Cannot complete cancelled/failed booking' });
+  }
+
+  booking.status = 'completed';
+  await booking.save();
+
+  await createNotification({
+    userId: booking.user,
+    title: 'Booking Completed',
+    message: `Booking ${booking.bookingCode} has been marked completed.`,
+    type: 'booking',
+    metadata: { bookingId: booking._id, parkingId: booking.parkingSpot._id },
+    io: req.io
+  });
+
+  res.status(200).json({ success: true, data: booking });
 });
