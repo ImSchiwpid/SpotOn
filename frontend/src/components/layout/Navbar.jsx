@@ -6,7 +6,9 @@ import { AuthContext, SocketContext } from '../../App';
 import { notificationAPI } from '../../utils/api';
 import { formatRoleLabel } from '../../utils/roles';
 
-const Navbar = ({ onMenuClick }) => {
+const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+
+const Navbar = ({ onMenuClick, isSidebarCollapsed = false }) => {
   const { user: authUser, logout } = useContext(AuthContext);
   const socket = useContext(SocketContext);
   const navigate = useNavigate();
@@ -14,6 +16,7 @@ const Navbar = ({ onMenuClick }) => {
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [scrollProgress, setScrollProgress] = useState(0);
   const profileRef = useRef(null);
   const notifRef = useRef(null);
 
@@ -29,6 +32,17 @@ const Navbar = ({ onMenuClick }) => {
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    const onScroll = () => {
+      const currentY = window.scrollY;
+      setScrollProgress(clamp(currentY / 120, 0, 1));
+    };
+
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
   useEffect(() => {
@@ -94,35 +108,62 @@ const Navbar = ({ onMenuClick }) => {
     }
   };
 
+  const headerHeight = 80 - 18 * scrollProgress;
+  const headerShift = -12 * scrollProgress;
+  const bgAlpha = 0.7 + 0.22 * scrollProgress;
+  const borderAlpha = 0.45 + 0.25 * scrollProgress;
+  const blurValue = 12 + 10 * scrollProgress;
+  const shadowAlpha = 0.04 + 0.07 * scrollProgress;
+  const isCompact = scrollProgress > 0.5;
+
   return (
-    <header className="fixed top-0 right-0 left-[280px] h-20 bg-white/80 backdrop-blur-lg border-b border-gray-100 z-30 px-6 flex items-center justify-between">
+    <motion.header
+      initial={{ opacity: 0, y: -12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.28, ease: 'easeOut' }}
+      className={`fixed right-0 left-0 z-30 flex items-center justify-between px-4 md:px-6 transition-all duration-300 lg:left-[280px] ${
+        isSidebarCollapsed ? 'lg:left-[80px]' : 'lg:left-[280px]'
+      }`}
+      style={{
+        height: `${headerHeight}px`,
+        transform: `translateY(${headerShift}px)`,
+        backgroundColor: `rgba(255,255,255,${bgAlpha})`,
+        borderBottom: `1px solid rgba(229,231,235,${borderAlpha})`,
+        backdropFilter: `blur(${blurValue}px)`,
+        boxShadow: `0 8px 24px rgba(15,23,42,${shadowAlpha})`
+      }}
+    >
       {/* Mobile Menu Button */}
       <button
         onClick={onMenuClick}
-        className="lg:hidden w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center text-gray-600"
+        className="lg:hidden w-10 h-10 rounded-xl border border-gray-200 bg-white/80 flex items-center justify-center text-gray-600"
       >
         <FiMenu className="w-5 h-5" />
       </button>
 
       {/* Search Bar */}
-      <div className="hidden md:flex items-center flex-1 max-w-xl mx-4">
+      <div
+        className={`hidden md:flex items-center flex-1 mx-4 overflow-hidden transition-all duration-300 ${
+          isCompact ? 'max-w-0 opacity-0 pointer-events-none' : 'max-w-xl opacity-100'
+        }`}
+      >
         <div className="relative w-full">
           <FiSearch className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
           <input
             type="text"
             placeholder="Search parking spots, bookings..."
-            className="w-full pl-12 pr-4 py-3 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-primary-500/20 focus:bg-white transition-all placeholder-gray-400 text-gray-700"
+            className="w-full pl-12 pr-4 py-3 border border-gray-200 bg-white/80 backdrop-blur-sm rounded-2xl focus:ring-2 focus:ring-primary-500/20 focus:border-primary-200 transition-all placeholder-gray-400 text-gray-700"
           />
         </div>
       </div>
 
       {/* Right Section */}
-      <div className="flex items-center gap-4">
+      <div className={`flex items-center transition-all duration-300 ${isCompact ? 'gap-2' : 'gap-4'}`}>
         {/* Notifications */}
         <div className="relative" ref={notifRef}>
           <button
             onClick={() => setIsNotifOpen(!isNotifOpen)}
-            className="relative w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center text-gray-600 hover:bg-gray-200 transition-colors"
+            className="relative w-10 h-10 rounded-xl border border-gray-200 bg-white/80 flex items-center justify-center text-gray-600 hover:bg-white transition-colors"
           >
             <FiBell className="w-5 h-5" />
             {unreadCount > 0 && (
@@ -139,7 +180,7 @@ const Navbar = ({ onMenuClick }) => {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 10, scale: 0.95 }}
                 transition={{ duration: 0.2 }}
-                className="absolute right-0 top-12 w-80 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden"
+                className="absolute right-0 top-12 w-80 bg-white/90 backdrop-blur-xl rounded-2xl shadow-card border border-gray-100 overflow-hidden"
               >
                 <div className="p-4 border-b border-gray-100">
                   <h3 className="font-semibold text-gray-900">Notifications</h3>
@@ -187,18 +228,42 @@ const Navbar = ({ onMenuClick }) => {
         <div className="relative" ref={profileRef}>
           <button
             onClick={() => setIsProfileOpen(!isProfileOpen)}
-            className="flex items-center gap-3 p-1.5 pr-3 rounded-xl hover:bg-gray-50 transition-colors"
+            className={`flex items-center rounded-xl hover:bg-gray-50 transition-all duration-300 ${
+              isCompact ? 'w-10 h-10 justify-center p-0' : 'gap-3 p-1.5 pr-3'
+            }`}
           >
             <img
               src={displayUser.avatar}
               alt={displayUser.name}
               className="w-10 h-10 rounded-xl object-cover ring-2 ring-primary-100"
             />
-            <div className="hidden md:block text-left">
-              <p className="font-semibold text-gray-900 text-sm">{displayUser.name}</p>
-              <p className="text-xs text-gray-500">{displayUser.role}</p>
-            </div>
-            <FiChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isProfileOpen ? 'rotate-180' : ''}`} />
+            <AnimatePresence initial={false}>
+              {!isCompact && (
+                <motion.div
+                  key="profile-meta"
+                  initial={{ opacity: 0, width: 0 }}
+                  animate={{ opacity: 1, width: 'auto' }}
+                  exit={{ opacity: 0, width: 0 }}
+                  className="hidden md:block text-left overflow-hidden whitespace-nowrap"
+                >
+                  <p className="font-semibold text-gray-900 text-sm">{displayUser.name}</p>
+                  <p className="text-xs text-gray-500">{displayUser.role}</p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+            <AnimatePresence initial={false}>
+              {!isCompact && (
+                <motion.div
+                  key="profile-chevron"
+                  initial={{ opacity: 0, width: 0 }}
+                  animate={{ opacity: 1, width: 'auto' }}
+                  exit={{ opacity: 0, width: 0 }}
+                  className="overflow-hidden"
+                >
+                  <FiChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isProfileOpen ? 'rotate-180' : ''}`} />
+                </motion.div>
+              )}
+            </AnimatePresence>
           </button>
 
           <AnimatePresence>
@@ -208,7 +273,7 @@ const Navbar = ({ onMenuClick }) => {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 10, scale: 0.95 }}
                 transition={{ duration: 0.2 }}
-                className="absolute right-0 top-14 w-64 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden"
+                className="absolute right-0 top-14 w-64 bg-white/90 backdrop-blur-xl rounded-2xl shadow-card border border-gray-100 overflow-hidden"
               >
                 <div className="p-4 border-b border-gray-100">
                   <div className="flex items-center gap-3">
@@ -272,7 +337,7 @@ const Navbar = ({ onMenuClick }) => {
           </AnimatePresence>
         </div>
       </div>
-    </header>
+    </motion.header>
   );
 };
 

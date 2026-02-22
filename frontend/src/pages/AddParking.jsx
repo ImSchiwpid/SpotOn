@@ -23,6 +23,11 @@ const MapClickPicker = ({ onSelect }) => {
     click(event) {
       const { lat, lng } = event.latlng;
       onSelect([lat, lng]);
+    },
+    touchend(event) {
+      if (!event?.latlng) return;
+      const { lat, lng } = event.latlng;
+      onSelect([lat, lng]);
     }
   });
   return null;
@@ -308,7 +313,20 @@ const AddParking = () => {
                     setMapCenter(coords);
                   }}
                 />
-                {markerPosition && <Marker position={markerPosition} />}
+                {markerPosition && (
+                  <Marker
+                    position={markerPosition}
+                    draggable
+                    eventHandlers={{
+                      dragend: (event) => {
+                        const marker = event.target;
+                        const { lat, lng } = marker.getLatLng();
+                        setSelectedCoords([lat, lng]);
+                        setMapCenter([lat, lng]);
+                      }
+                    }}
+                  />
+                )}
               </MapContainer>
             </div>
             <p className="text-xs text-gray-600 mt-2">

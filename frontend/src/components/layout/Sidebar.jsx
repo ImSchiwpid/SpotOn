@@ -16,6 +16,7 @@ import {
 } from 'react-icons/fi';
 import { AuthContext } from '../../App';
 import { normalizeRole } from '../../utils/roles';
+import BrandLogo from '../ui/BrandLogo';
 
 const navItems = [
   { icon: FiHome, label: 'Dashboard', path: '/dashboard' },
@@ -47,14 +48,12 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
       initial={false}
       animate={{ width: isCollapsed ? '80px' : '280px' }}
       transition={{ duration: 0.3, ease: 'easeInOut' }}
-      className="fixed left-0 top-0 h-screen bg-white border-r border-gray-100 shadow-card z-40 flex flex-col"
+      className="fixed left-0 top-0 h-screen border-r border-white/70 bg-white/75 backdrop-blur-xl shadow-card z-40 flex flex-col"
     >
       {/* Logo */}
       <div className="p-6 border-b border-gray-100">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center shadow-lg">
-            <FiMap className="w-5 h-5 text-white" />
-          </div>
+          <BrandLogo showText={false} />
           <AnimatePresence>
             {!isCollapsed && (
               <motion.div
@@ -63,9 +62,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
                 exit={{ opacity: 0, width: 0 }}
                 className="overflow-hidden"
               >
-                <h1 className="text-xl font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">
-                  SPOT-ON
-                </h1>
+                <h1 className="text-lg font-bold tracking-tight text-primary-700">SPOT-ON</h1>
                 <p className="text-xs text-gray-400">Smart Parking</p>
               </motion.div>
             )}
@@ -89,7 +86,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
       {/* Collapse Toggle */}
       <button
         onClick={() => setIsCollapsed(!isCollapsed)}
-        className="absolute -right-3 top-20 w-6 h-6 bg-white border-2 border-gray-200 rounded-full flex items-center justify-center text-gray-400 hover:text-primary-600 hover:border-primary-200 transition-all shadow-md"
+        className="absolute -right-3 top-20 w-6 h-6 bg-white/90 border border-gray-200 rounded-full flex items-center justify-center text-gray-400 hover:text-primary-600 hover:border-primary-200 transition-all shadow-sm"
       >
         {isCollapsed ? (
           <FiChevronRight className="w-4 h-4" />
@@ -109,12 +106,12 @@ const NavItem = ({ icon: Icon, label, path, isCollapsed }) => {
         className={({ isActive }) =>
           `flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-200 group ${
             isActive
-              ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white shadow-lg shadow-primary-500/30'
-              : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
+              ? 'border border-primary-200 bg-primary-50/80 text-primary-700'
+              : 'text-gray-600 hover:bg-white/70 hover:text-gray-900'
           }`
         }
       >
-        <div className="w-10 h-10 rounded-xl bg-gray-100 group-hover:bg-white transition-colors flex items-center justify-center">
+        <div className="w-10 h-10 rounded-xl bg-white/70 border border-gray-100 transition-colors flex items-center justify-center">
           <Icon className="w-5 h-5" />
         </div>
         <AnimatePresence>

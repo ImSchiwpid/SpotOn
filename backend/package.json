@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js"
+    "dev:api": "nodemon server.js",
+    "dev": "node scripts/dev.js"
   },
   "dependencies": {
     "@sendgrid/mail": "^8.1.6",

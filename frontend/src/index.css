@@ -5,40 +5,72 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
 @layer base {
+  :root {
+    --surface-bg: 255 255 255;
+    --surface-border: 229 231 235;
+  }
+
   html {
     font-family: 'Inter', system-ui, sans-serif;
   }
   
   body {
     @apply bg-gray-50 text-gray-900 antialiased;
+    position: relative;
+    min-height: 100vh;
+    background-image: linear-gradient(180deg, #f8fafc 0%, #f8fafc 45%, #f1f5f9 100%);
+  }
+
+  body::before,
+  body::after {
+    content: '';
+    position: fixed;
+    z-index: -1;
+    width: 26rem;
+    height: 26rem;
+    border-radius: 9999px;
+    filter: blur(70px);
+    pointer-events: none;
+  }
+
+  body::before {
+    top: -8rem;
+    left: -5rem;
+    background: rgba(196, 181, 253, 0.28);
+  }
+
+  body::after {
+    right: -6rem;
+    bottom: -8rem;
+    background: rgba(221, 214, 254, 0.3);
   }
 }
 
 @layer components {
   .card {
-    @apply bg-white rounded-2xl shadow-card border border-gray-100;
+    @apply bg-white/80 backdrop-blur-md rounded-2xl shadow-card border border-gray-100;
   }
   
   .btn-primary {
-    @apply px-4 py-2.5 bg-primary-600 text-white rounded-xl font-medium hover:bg-primary-700 transition-colors shadow-lg shadow-primary-500/30;
+    @apply px-4 py-2.5 bg-primary-600 text-white rounded-xl font-medium hover:bg-primary-700 transition-colors shadow-lg shadow-primary-500/20;
   }
   
   .btn-secondary {
-    @apply px-4 py-2.5 bg-white border border-gray-200 rounded-xl font-medium text-gray-700 hover:bg-gray-50 transition-colors;
+    @apply px-4 py-2.5 bg-white/80 backdrop-blur-sm border border-gray-200 rounded-xl font-medium text-gray-700 hover:bg-white transition-colors;
   }
   
   .input {
-    @apply w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all;
+    @apply w-full px-4 py-3 bg-white/80 backdrop-blur-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500/20 focus:border-primary-300 transition-all;
   }
 }
 
 @layer utilities {
   .shadow-card {
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
   }
   
   .shadow-premium {
-    box-shadow: 0 25px 50px -12px rgba(139, 92, 246, 0.25);
+    box-shadow: 0 22px 45px -14px rgba(99, 102, 241, 0.2);
   }
 }
 
@@ -64,7 +96,7 @@
 
 /* Smooth transitions */
 * {
-  transition-property: background-color, border-color, color, fill, stroke, opacity, box-shadow, transform;
+  transition-property: background-color, border-color, color, fill, stroke, opacity, box-shadow;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   transition-duration: 150ms;
 }

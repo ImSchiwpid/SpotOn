@@ -19,6 +19,7 @@ import Register from './pages/Register';
 import OwnerPanel from './pages/OwnerPanel';
 import AdminPanel from './pages/AdminPanel';
 import Notifications from './pages/Notifications';
+import LandingPage from './pages/LandingPage';
 
 // Context
 export const AuthContext = createContext();
@@ -141,9 +142,9 @@ function App() {
           <div className="App">
             <Routes>
               {/* Public Routes */}
-              <Route path="/" element={<Navigate to="/dashboard" />} />
-              <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <Login />} />
-              <Route path="/register" element={user ? <Navigate to="/dashboard" /> : <Register />} />
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/login" element={user ? <Navigate to="/" /> : <Login />} />
+              <Route path="/register" element={user ? <Navigate to="/" /> : <Register />} />
               
               {/* Protected Routes */}
               <Route path="/dashboard" element={
@@ -222,6 +223,7 @@ function App() {
                   <Profile />
                 </ProtectedRoute>
               } />
+              <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
             
             <Toaster

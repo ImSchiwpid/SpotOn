@@ -4,16 +4,46 @@
   justify-content: center;
   align-items: center;
   padding: 2rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%);
+}
+
+.auth-container::before,
+.auth-container::after {
+  content: '';
+  position: absolute;
+  width: 22rem;
+  height: 22rem;
+  border-radius: 999px;
+  filter: blur(70px);
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.auth-container::before {
+  top: -7rem;
+  left: -5rem;
+  background: #c4b5fd;
+}
+
+.auth-container::after {
+  right: -5rem;
+  bottom: -9rem;
+  background: #ddd6fe;
 }
 
 .auth-card {
-  background: white;
+  background: rgba(255, 255, 255, 0.84);
+  backdrop-filter: blur(14px);
   border-radius: 2rem;
   padding: 3rem;
   width: 100%;
   max-width: 450px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.1);
+  position: relative;
+  z-index: 1;
 }
 
 .auth-header {
@@ -21,10 +51,15 @@
   margin-bottom: 2rem;
 }
 
+.auth-back-home {
+  display: inline-flex;
+  text-decoration: none;
+}
+
 .auth-title {
   font-size: 2rem;
   font-weight: 700;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   margin-bottom: 0.5rem;
@@ -142,7 +177,7 @@
 }
 
 .btn-google:hover {
-  background: #f9fafb;
+  background: #ffffff;
   border-color: #d1d5db;
 }
 
@@ -154,14 +189,29 @@
 }
 
 .auth-footer a {
-  color: #667eea;
+  color: #7c3aed;
   font-weight: 600;
   text-decoration: none;
   transition: color 0.3s ease;
 }
 
 .auth-footer a:hover {
-  color: #5568d3;
+  color: #6d28d9;
+}
+
+.auth-home-link {
+  text-align: center;
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+}
+
+.auth-home-link a {
+  color: #6b7280;
+  text-decoration: none;
+}
+
+.auth-home-link a:hover {
+  color: #4b5563;
 }
 
 @media (max-width: 640px) {

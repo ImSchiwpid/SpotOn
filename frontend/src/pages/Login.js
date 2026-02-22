@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import { AuthContext } from '../App';
 import { authAPI } from '../utils/api';
 import { getBackendOrigin } from '../utils/appConfig';
+import BrandLogo from '../components/ui/BrandLogo';
 import './Login.css';
 
 const Login = () => {
@@ -62,6 +63,10 @@ const Login = () => {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
       >
+        <Link to="/" className="auth-back-home">
+          <BrandLogo />
+        </Link>
+
         <div className="auth-header">
           <h1 className="auth-title">Welcome Back!</h1>
           <p className="auth-subtitle">Login to find your perfect parking spot</p>
@@ -152,6 +157,9 @@ const Login = () => {
 
         <p className="auth-footer">
           Don't have an account? <Link to="/register">Sign up</Link>
+        </p>
+        <p className="auth-home-link">
+          <Link to="/">Back to Landing Page</Link>
         </p>
       </motion.div>
     </div>

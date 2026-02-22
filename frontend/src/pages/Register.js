@@ -5,6 +5,7 @@ import { FiEye, FiEyeOff, FiLock, FiMail, FiPhone, FiUser } from 'react-icons/fi
 import toast from 'react-hot-toast';
 import { AuthContext } from '../App';
 import { authAPI } from '../utils/api';
+import BrandLogo from '../components/ui/BrandLogo';
 import './Login.css';
 
 const Register = () => {
@@ -56,6 +57,10 @@ const Register = () => {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
       >
+        <Link to="/" className="auth-back-home">
+          <BrandLogo />
+        </Link>
+
         <div className="auth-header">
           <h1 className="auth-title">Create Account</h1>
           <p className="auth-subtitle">Start using SPOT-ON Parking</p>
@@ -161,6 +166,9 @@ const Register = () => {
 
         <p className="auth-footer">
           Already have an account? <Link to="/login">Login</Link>
+        </p>
+        <p className="auth-home-link">
+          <Link to="/">Back to Landing Page</Link>
         </p>
       </motion.div>
     </div>
