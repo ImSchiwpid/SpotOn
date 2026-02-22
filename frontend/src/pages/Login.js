@@ -17,8 +17,7 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     email: '',
-    password: '',
-    role: 'customer'
+    password: ''
   });
 
   const handleChange = (e) => {
@@ -89,22 +88,9 @@ const Login = () => {
             </div>
           </div>
 
-          <div className="form-group">
-            <label htmlFor="role">Login As</label>
-            <div className="input-with-icon">
-              <select
-                id="role"
-                name="role"
-                value={formData.role}
-                onChange={handleChange}
-                required
-              >
-                <option value="customer">Customer</option>
-                <option value="parking_owner">Parking Owner</option>
-                <option value="admin">Admin</option>
-              </select>
-            </div>
-          </div>
+          <p className="auth-subtitle" style={{ marginTop: '-0.5rem', marginBottom: '0.25rem' }}>
+            Sign in with the email linked to your SPOT-ON account. Your role is detected automatically.
+          </p>
 
           <div className="form-group">
             <label htmlFor="password">Password</label>

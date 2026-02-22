@@ -6,7 +6,6 @@ import {
   FiCalendar,
   FiCheckCircle,
   FiClock,
-  FiDollarSign,
   FiMapPin,
   FiShield,
   FiStar
@@ -74,9 +73,12 @@ const LandingPage = () => {
   const headerBorderAlpha = 0.45 + 0.25 * scrollProgress;
   const headerBlur = 10 + 10 * scrollProgress;
   const headerShadowAlpha = 0.03 + 0.06 * scrollProgress;
+  const brandTextOpacity = 1 - scrollProgress;
+  const brandTextWidth = `${Math.max(0, 112 - 112 * scrollProgress)}px`;
+  const brandIconScale = 1 + 0.16 * scrollProgress;
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-primary-50 via-white to-white text-gray-900">
+    <div className="min-h-screen text-gray-900">
       <motion.header
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -93,7 +95,12 @@ const LandingPage = () => {
       >
         <div className="mx-auto flex h-full w-full max-w-7xl items-center justify-between px-5 md:px-8">
           <Link to="/" aria-label="SPOT-ON home">
-            <BrandLogo />
+            <BrandLogo
+              iconClassName="origin-left transition-transform duration-300"
+              iconStyle={{ transform: `scale(${brandIconScale})` }}
+              textClassName="transition-all duration-300"
+              textStyle={{ opacity: brandTextOpacity, width: brandTextWidth }}
+            />
           </Link>
           <div className="flex items-center gap-3">
             <Link to="/login" className="btn-secondary">
@@ -213,7 +220,7 @@ const LandingPage = () => {
                   className="mt-6 inline-flex items-center gap-2 rounded-xl bg-white px-5 py-3 font-semibold text-primary-700 hover:bg-primary-50"
                 >
                   List Your Spot
-                  <FiDollarSign className="h-4 w-4" />
+                  <span className="text-base font-bold">₹</span>
                 </Link>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">

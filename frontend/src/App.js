@@ -20,6 +20,7 @@ import OwnerPanel from './pages/OwnerPanel';
 import AdminPanel from './pages/AdminPanel';
 import Notifications from './pages/Notifications';
 import LandingPage from './pages/LandingPage';
+import Settings from './pages/Settings';
 
 // Context
 export const AuthContext = createContext();
@@ -60,6 +61,8 @@ function App() {
       }
 
       if (!storedToken) {
+        setUser(null);
+        localStorage.removeItem('user');
         setAuthReady(true);
         return;
       }
@@ -143,8 +146,8 @@ function App() {
             <Routes>
               {/* Public Routes */}
               <Route path="/" element={<LandingPage />} />
-              <Route path="/login" element={user ? <Navigate to="/" /> : <Login />} />
-              <Route path="/register" element={user ? <Navigate to="/" /> : <Register />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Register />} />
               
               {/* Protected Routes */}
               <Route path="/dashboard" element={
@@ -207,14 +210,26 @@ function App() {
                 </RoleRoute>
               } />
 
-              <Route path="/admin/users" element={<Navigate to="/admin" replace />} />
-              <Route path="/admin/pending" element={<Navigate to="/admin" replace />} />
-              <Route path="/admin/transactions" element={<Navigate to="/admin" replace />} />
+              <Route path="/admin/users" element={
+                <RoleRoute roles={['admin']}>
+                  <Navigate to="/admin" replace />
+                </RoleRoute>
+              } />
+              <Route path="/admin/pending" element={
+                <RoleRoute roles={['admin']}>
+                  <Navigate to="/admin" replace />
+                </RoleRoute>
+              } />
+              <Route path="/admin/transactions" element={
+                <RoleRoute roles={['admin']}>
+                  <Navigate to="/admin" replace />
+                </RoleRoute>
+              } />
               
               {/* Settings & Help Routes */}
               <Route path="/settings" element={
                 <ProtectedRoute>
-                  <Profile />
+                  <Settings />
                 </ProtectedRoute>
               } />
               

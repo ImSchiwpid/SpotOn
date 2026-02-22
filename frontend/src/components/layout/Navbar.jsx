@@ -110,10 +110,10 @@ const Navbar = ({ onMenuClick, isSidebarCollapsed = false }) => {
 
   const headerHeight = 80 - 18 * scrollProgress;
   const headerShift = -12 * scrollProgress;
-  const bgAlpha = 0.7 + 0.22 * scrollProgress;
-  const borderAlpha = 0.45 + 0.25 * scrollProgress;
-  const blurValue = 12 + 10 * scrollProgress;
-  const shadowAlpha = 0.04 + 0.07 * scrollProgress;
+  const bgAlpha = 0.48 + 0.14 * scrollProgress;
+  const borderAlpha = 0.28 + 0.2 * scrollProgress;
+  const blurValue = 16 + 12 * scrollProgress;
+  const shadowAlpha = 0.03 + 0.05 * scrollProgress;
   const isCompact = scrollProgress > 0.5;
 
   return (
@@ -310,14 +310,15 @@ const Navbar = ({ onMenuClick, isSidebarCollapsed = false }) => {
                     <span className="font-medium">Settings</span>
                   </button>
                   <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleNavigation('/help');
-                    }}
-                    className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors"
+                    type="button"
+                    disabled
+                    className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl text-gray-400 bg-gray-50/70 cursor-not-allowed"
                   >
-                    <FiHelpCircle className="w-5 h-5" />
-                    <span className="font-medium">Help & Support</span>
+                    <span className="flex items-center gap-3">
+                      <FiHelpCircle className="w-5 h-5" />
+                      <span className="font-medium">Help & Support</span>
+                    </span>
+                    <span className="text-[10px] font-semibold uppercase tracking-wide">Soon</span>
                   </button>
                 </div>
                 <div className="p-2 border-t border-gray-100">

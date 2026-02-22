@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
-import { FiDollarSign, FiMapPin, FiUpload } from 'react-icons/fi';
+import { FiMapPin, FiUpload } from 'react-icons/fi';
 import { MapContainer, Marker, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -272,7 +272,7 @@ const AddParking = () => {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Price per Hour *</label>
             <div className="relative">
-              <FiDollarSign className="absolute left-3 top-3.5 text-gray-400" />
+              <span className="absolute left-3 top-3 text-base font-semibold text-gray-400">₹</span>
               <input
                 name="pricePerHour"
                 type="number"

@@ -4,7 +4,7 @@ import { MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import toast from 'react-hot-toast';
-import { FiDollarSign, FiHeart, FiInfo, FiMapPin, FiSearch } from 'react-icons/fi';
+import { FiHeart, FiInfo, FiMapPin, FiSearch } from 'react-icons/fi';
 import { MainLayout } from '../components/layout';
 import { AuthContext, SocketContext } from '../App';
 import { bookingAPI, carAPI, favoriteAPI, parkingAPI } from '../utils/api';
@@ -485,7 +485,7 @@ const ExploreParking = () => {
         {loading ? <p className="text-sm text-gray-500">Loading parking spots...</p> : null}
         {!loading && filteredSpots.length === 0 ? <p className="text-sm text-gray-500">No parking spots found.</p> : null}
 
-        <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
+        <div className="grid grid-cols-1 xl:grid-cols-5 gap-6 items-start">
           <div className="xl:col-span-3 bg-white rounded-2xl border border-gray-100 shadow-card overflow-hidden">
             <MapContainer center={mapCenter} zoom={12} style={{ height: 560, width: '100%' }}>
               <TileLayer
@@ -541,7 +541,7 @@ const ExploreParking = () => {
                     {selectedSpot.address}, {selectedSpot.city}, {selectedSpot.state}
                   </p>
                   <p className="text-sm text-gray-600 flex items-center gap-1">
-                    <FiDollarSign className="w-4 h-4" />
+                    <span className="text-sm font-semibold">₹</span>
                     {selectedSpot.pricePerHour}/hour
                   </p>
                   <p className="text-sm text-gray-600">
