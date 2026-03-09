@@ -121,7 +121,12 @@ const ExploreParking = () => {
   const fetchCars = async () => {
     try {
       const response = await carAPI.getAll();
-      setCars(response?.data?.data || []);
+      const fetchedCars = response?.data?.data || [];
+      setCars(fetchedCars);
+      setBookingForm((prev) => ({
+        ...prev,
+        carId: prev.carId || fetchedCars[0]?._id || ''
+      }));
     } catch (error) {
       setCars([]);
     }
@@ -324,6 +329,11 @@ const ExploreParking = () => {
       return;
     }
 
+    if (!bookingForm.carId) {
+      toast.error('Please select a car');
+      return;
+    }
+
     const scriptLoaded = await loadRazorpayScript();
     if (!scriptLoaded) {
       toast.error('Unable to load Razorpay checkout');
@@ -342,9 +352,22 @@ const ExploreParking = () => {
 
       const booking = response?.data?.data?.booking;
       const order = response?.data?.data?.order;
+      const paymentUnavailable = response?.data?.data?.paymentUnavailable;
 
-      if (!booking || !order?.id) {
-        toast.error('Booking created but payment order is missing');
+      if (!booking) {
+        toast.error('Booking could not be created');
+        return;
+      }
+
+      if (paymentUnavailable || !order?.id) {
+        toast('Booking saved. Payment order unavailable right now; pay later from My Bookings.');
+        setBookingForm((prev) => ({
+          ...prev,
+          startTime: '',
+          endTime: '',
+          specialRequests: ''
+        }));
+        await fetchParking(selectedCity, filters);
         return;
       }
 
@@ -588,14 +611,16 @@ const ExploreParking = () => {
                           setBookingForm((prev) => ({
                             ...prev,
                             carId: e.target.value
-                          }))
-                        }
-                        className="px-3 py-2 border border-gray-200 rounded-xl text-sm"
+          }))
+        }
+        className="px-3 py-2 border border-gray-200 rounded-xl text-sm"
                       >
-                        <option value="">No car selected (optional)</option>
+                        <option value="" disabled>
+                          {cars.length ? 'Select a car' : 'No saved vehicles (add from Cars page)'}
+                        </option>
                         {cars.map((car) => (
                           <option key={car._id} value={car._id}>
-                            {car.name} ({car.numberPlate})
+                            {(car.type || 'car').toUpperCase()} - {car.name} ({car.numberPlate})
                           </option>
                         ))}
                       </select>

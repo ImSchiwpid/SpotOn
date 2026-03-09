@@ -165,3 +165,34 @@
 .leaflet-bottom {
   z-index: 10 !important;
 }
+
+/* Themed file upload button */
+input[type='file'] {
+  color: #4b5563;
+  font-size: 0.95rem;
+}
+
+input[type='file']::file-selector-button,
+input[type='file']::-webkit-file-upload-button {
+  margin-right: 0.75rem;
+  border: 1px solid #7c3aed;
+  border-radius: 0.7rem;
+  padding: 0.5rem 0.85rem;
+  background: #7c3aed;
+  color: #ffffff;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+}
+
+input[type='file']::file-selector-button:hover,
+input[type='file']::-webkit-file-upload-button:hover {
+  background: #6d28d9;
+  border-color: #6d28d9;
+}
+
+input[type='file']::file-selector-button:active,
+input[type='file']::-webkit-file-upload-button:active {
+  background: #5b21b6;
+  border-color: #5b21b6;
+}

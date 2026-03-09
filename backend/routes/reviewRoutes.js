@@ -14,8 +14,7 @@ router.get('/parking/:id', mongoIdValidation, getParkingReviews);
 
 router.use(protect);
 router.get('/my', getMyReviews);
-router.post('/', restrictTo('customer', 'admin'), createReview);
+router.post('/', createReview);
 router.put('/:id/reply', mongoIdValidation, restrictTo('parking_owner', 'admin'), replyToReview);
 
 export default router;
-

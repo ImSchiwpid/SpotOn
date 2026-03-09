@@ -58,6 +58,11 @@ const MyBookings = () => {
   };
 
   const submitReview = async () => {
+    if (!reviewPayload.bookingId) {
+      toast.error('Please select a completed booking');
+      return;
+    }
+
     try {
       await reviewAPI.create(reviewPayload);
       toast.success('Review submitted');
@@ -147,9 +152,9 @@ const MyBookings = () => {
           <div className="grid md:grid-cols-3 gap-3 mt-4">
             <input
               value={reviewPayload.bookingId}
-              readOnly
-              className="border border-gray-200 rounded-lg px-3 py-2 bg-gray-50"
-              placeholder="Booking ID"
+              onChange={(e) => setReviewPayload((prev) => ({ ...prev, bookingId: e.target.value }))}
+              className="border border-gray-200 rounded-lg px-3 py-2"
+              placeholder="Enter Booking ID"
             />
             <input
               type="number"
@@ -181,4 +186,3 @@ const MyBookings = () => {
 };
 
 export default MyBookings;
-

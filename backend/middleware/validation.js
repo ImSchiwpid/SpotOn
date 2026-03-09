@@ -56,7 +56,7 @@ export const bookingValidation = [
   body('parkingSpotId').isMongoId().withMessage('Valid parking spot ID required'),
   body('startTime').isISO8601().withMessage('Valid start time required'),
   body('endTime').isISO8601().withMessage('Valid end time required'),
-  body('carId').optional().isMongoId().withMessage('Valid car ID required'),
+  body('carId').isMongoId().withMessage('Valid car ID required'),
   body('specialRequests').optional().isString().isLength({ max: 500 }).withMessage('Special requests cannot exceed 500 characters'),
   validate
 ];

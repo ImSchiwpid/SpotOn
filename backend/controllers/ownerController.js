@@ -18,7 +18,10 @@ export const getOwnerDashboard = asyncHandler(async (req, res) => {
 
   const [totalSpots, totalBookings, earningsAgg, monthlyRevenue, occupancyAgg] = await Promise.all([
     ParkingSpot.countDocuments({ owner: req.user.id }),
-    Booking.countDocuments({ parkingSpot: { $in: spotIds }, paymentStatus: 'paid' }),
+    Booking.countDocuments({
+      parkingSpot: { $in: spotIds },
+      status: { $in: ['confirmed', 'completed'] }
+    }),
     Transaction.aggregate([
       { $match: { user: new mongoose.Types.ObjectId(req.user.id), type: 'earning' } },
       { $group: { _id: null, total: { $sum: '$amount' } } }
@@ -201,4 +204,3 @@ export const getOwnerTransactions = asyncHandler(async (req, res) => {
 
   res.status(200).json({ success: true, count: transactions.length, data: transactions });
 });
-

@@ -1,0 +1,15 @@
+{
+    "name":  "spot-on-parking-root",
+    "private":  true,
+    "version":  "1.0.0",
+    "scripts":  {
+                    "install:all":  "npm.cmd --prefix backend install \u0026\u0026 npm.cmd --prefix frontend install",
+                    "dev":  "concurrently -k -n backend,frontend -c cyan,green \"npm.cmd --prefix backend run dev:api\" \"npm.cmd --prefix frontend run dev\"",
+                    "dev:backend":  "npm.cmd --prefix backend run dev:api",
+                    "dev:frontend":  "npm.cmd --prefix frontend run dev",
+                    "start":  "npm run dev"
+                },
+    "devDependencies":  {
+                            "concurrently":  "^9.2.1"
+                        }
+}

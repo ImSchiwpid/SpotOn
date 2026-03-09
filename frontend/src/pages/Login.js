@@ -2,11 +2,9 @@ import React, { useState, useContext } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { FiMail, FiLock, FiEye, FiEyeOff } from 'react-icons/fi';
-import { FcGoogle } from 'react-icons/fc';
 import toast from 'react-hot-toast';
 import { AuthContext } from '../App';
 import { authAPI } from '../utils/api';
-import { getBackendOrigin } from '../utils/appConfig';
 import BrandLogo from '../components/ui/BrandLogo';
 import './Login.css';
 
@@ -48,10 +46,6 @@ const Login = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleGoogleLogin = () => {
-    window.location.href = `${getBackendOrigin()}/api/auth/google`;
   };
 
   return (
@@ -125,21 +119,6 @@ const Login = () => {
             {loading ? 'Logging in...' : 'Login'}
           </motion.button>
         </form>
-
-        <div className="auth-divider">
-          <span>OR</span>
-        </div>
-
-        <motion.button
-          type="button"
-          className="btn btn-google"
-          onClick={handleGoogleLogin}
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-        >
-          <FcGoogle size={20} />
-          Continue with Google
-        </motion.button>
 
         <p className="auth-footer">
           Don't have an account? <Link to="/register">Sign up</Link>

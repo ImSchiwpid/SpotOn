@@ -1,4 +1,4 @@
-READ THIS DUMBASS
+READ THIS DUMBAHH
 Node.js LTS (npm comes with it)
 MongoDB Community Server or use MongoDB Atlas connection URI
 Git (only to clone repo)

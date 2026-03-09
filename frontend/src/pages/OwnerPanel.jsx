@@ -133,7 +133,7 @@ const OwnerPanel = () => {
 
         <div className="grid md:grid-cols-4 gap-4">
           <StatCard label="Listed Spots" value={dashboard?.totalSpots || 0} />
-          <StatCard label="Paid Bookings" value={dashboard?.totalBookings || 0} />
+          <StatCard label="Total Bookings" value={dashboard?.totalBookings || 0} />
           <StatCard label="Total Earnings" value={formatCurrency(dashboard?.totalEarnings || 0)} />
           <StatCard label="Occupancy" value={`${dashboard?.occupancyRate || 0}%`} helper="Across all your spots" />
         </div>

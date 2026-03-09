@@ -49,6 +49,13 @@ const notifyAdmins = async (io, payloadBuilder) => {
 export const createBooking = asyncHandler(async (req, res) => {
   const { parkingSpotId, carId, startTime, endTime, specialRequests } = req.body;
 
+  if (!carId) {
+    return res.status(400).json({
+      success: false,
+      message: 'Please select a car to continue'
+    });
+  }
+
   // Get parking spot with locking check
   const parkingSpot = await ParkingSpot.findById(parkingSpotId);
 
@@ -148,9 +155,9 @@ export const createBooking = asyncHandler(async (req, res) => {
     hours: calculatedHours, // Use calculated hours, not frontend-provided
     totalAmount,
     specialRequests,
-    status: 'pending',
+    status: 'confirmed',
     paymentStatus: 'pending',
-    ownerDecision: 'pending'
+    ownerDecision: 'approved'
   });
 
   // Populate for response
@@ -172,7 +179,7 @@ export const createBooking = asyncHandler(async (req, res) => {
   }
   
   const options = {
-    amount: totalAmount * 100, // Amount in paise
+    amount: totalAmount * 100, // Amount in rupees
     currency: 'INR',
     receipt: booking._id.toString(),
     payment_capture: 1
@@ -188,8 +195,8 @@ export const createBooking = asyncHandler(async (req, res) => {
     // Notify booking creator
     await createNotification({
       userId: req.user.id,
-      title: 'Booking Created',
-      message: `Booking ${booking.bookingCode} created for ${booking.parkingSpot.title}. Complete payment to confirm.`,
+      title: 'Booking Confirmed',
+      message: `Booking ${booking.bookingCode} confirmed for ${booking.parkingSpot.title}. Complete payment to finish checkout.`,
       type: 'booking',
       metadata: { bookingId: booking._id, parkingId: booking.parkingSpot._id },
       io: req.io
@@ -227,13 +234,22 @@ export const createBooking = asyncHandler(async (req, res) => {
       }
     });
   } catch (error) {
-    // Restore slot on Razorpay error
-    await ParkingSpot.findByIdAndUpdate(parkingSpotId, { $inc: { availableSlots: 1 } });
-    await booking.deleteOne();
-    
-    res.status(500).json({
-      success: false,
-      message: 'Failed to create payment order'
+    // Keep booking pending if order generation fails so user can retry payment later.
+    console.error('Razorpay order creation failed:', error?.statusCode, error?.error || error?.message);
+
+    booking.status = 'confirmed';
+    booking.paymentStatus = 'pending';
+    booking.orderId = undefined;
+    await booking.save();
+
+    res.status(201).json({
+      success: true,
+      data: {
+        booking,
+        order: null,
+        paymentUnavailable: true
+      },
+      message: 'Booking created, but payment order could not be generated right now'
     });
   }
 });

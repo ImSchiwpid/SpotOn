@@ -243,7 +243,7 @@ const LandingPage = () => {
         </section>
       </main>
 
-      <DashboardFooter />
+      <DashboardFooter showFindParking />
     </div>
   );
 };

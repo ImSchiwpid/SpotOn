@@ -30,7 +30,18 @@ const refreshParkingRating = async (parkingSpotId) => {
 export const createReview = asyncHandler(async (req, res) => {
   const { bookingId, rating, comment } = req.body;
 
-  const booking = await Booking.findById(bookingId).populate('parkingSpot', 'owner');
+  const bookingIdentifier = String(bookingId || '').trim();
+  let booking = null;
+
+  // Support both Mongo booking _id and human-readable bookingCode.
+  if (/^[a-fA-F0-9]{24}$/.test(bookingIdentifier)) {
+    booking = await Booking.findById(bookingIdentifier).populate('parkingSpot', 'owner');
+  }
+
+  if (!booking) {
+    booking = await Booking.findOne({ bookingCode: bookingIdentifier }).populate('parkingSpot', 'owner');
+  }
+
   if (!booking) {
     return res.status(404).json({ success: false, message: 'Booking not found' });
   }
@@ -117,4 +128,3 @@ export const replyToReview = asyncHandler(async (req, res) => {
 
   res.status(200).json({ success: true, data: review });
 });
-

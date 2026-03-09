@@ -4,7 +4,7 @@ import { FiArrowUpRight, FiGithub, FiLinkedin, FiMap, FiMapPin, FiShield } from 
 import { AuthContext } from '../../App';
 import { normalizeRole } from '../../utils/roles';
 
-const DashboardFooter = () => {
+const DashboardFooter = ({ showFindParking = false }) => {
   const { user } = React.useContext(AuthContext);
   const role = normalizeRole(user?.role);
   const findParkingTarget = user && role !== 'admin' ? '/explore' : '/login';
@@ -29,15 +29,17 @@ const DashboardFooter = () => {
             requests from one clean dashboard.
           </p>
 
-          <div className="mt-6 flex flex-wrap gap-3">
-            <Link
-              to={findParkingTarget}
-              className="inline-flex items-center gap-2 rounded-xl bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-700"
-            >
-              Find Parking
-              <FiArrowUpRight className="h-4 w-4" />
-            </Link>
-          </div>
+          {showFindParking ? (
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Link
+                to={findParkingTarget}
+                className="inline-flex items-center gap-2 rounded-xl bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-700"
+              >
+                Find Parking
+                <FiArrowUpRight className="h-4 w-4" />
+              </Link>
+            </div>
+          ) : null}
         </div>
 
         <div className="mt-8 grid gap-3 border-t border-gray-200 pt-5 text-xs text-gray-500 sm:grid-cols-3">

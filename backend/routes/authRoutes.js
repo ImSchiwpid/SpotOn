@@ -6,13 +6,11 @@ import {
   getMe,
   updateProfile,
   updateProfileImage,
-  updatePassword,
-  googleCallback
+  updatePassword
 } from '../controllers/authController.js';
 import { protect } from '../middleware/auth.js';
 import { registerValidation, loginValidation } from '../middleware/validation.js';
 import { authLimiter } from '../middleware/rateLimiter.js';
-import passport from 'passport';
 import { upload } from '../config/cloudinary.js';
 
 const router = express.Router();
@@ -20,13 +18,6 @@ const router = express.Router();
 // Public routes
 router.post('/register', authLimiter, registerValidation, register);
 router.post('/login', authLimiter, loginValidation, login);
-
-// Google OAuth routes
-router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
-router.get('/google/callback',
-  passport.authenticate('google', { session: false, failureRedirect: '/login' }),
-  googleCallback
-);
 
 // Protected routes
 router.use(protect);

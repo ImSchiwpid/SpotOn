@@ -4,10 +4,7 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import passport from 'passport';
-import session from 'express-session';
 import connectDB from './config/database.js';
-import { configurePassport } from './config/passport.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 import { apiLimiter } from './middleware/rateLimiter.js';
 
@@ -65,22 +62,6 @@ app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:3000',
   credentials: true
 }));
-
-// Session configuration
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'your-secret-key',
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: process.env.NODE_ENV === 'production',
-    maxAge: 24 * 60 * 60 * 1000 // 24 hours
-  }
-}));
-
-// Initialize Passport
-app.use(passport.initialize());
-app.use(passport.session());
-configurePassport();
 
 // Apply rate limiting to all routes
 app.use('/api', apiLimiter);
